@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/og-preview.jpg" alt="Divya Drusti — Spatial Vision Studio by Razel Tech" width="25%">
+<img src="assets/og-preview.jpg" alt="Divya Drusti — Spatial Vision Studio by Razel Tech" width="50%">
 
 # DIVYA DRUSTI — Spatial Vision Studio
 
@@ -115,7 +115,7 @@ Pick a mode in the game dock. A question appears at the top and three answer orb
 
 1. **Dual pinch** (thumb + index on both hands) opens the spatial prism. Move fingers to reshape it, hands off-screen fades it.
 2. Bottom tabs switch scene; the dock below changes effect, hair or lip colour, or spell.
-3. **Pinch Shutter:** open the prism wide (outline turns green), then pinch index to thumb on both hands to save a clean, watermarked camera photo. Global hotkeys **Space** and **C** also trigger instant capture.
+3. **Capture Photo:** Tap the camera icon in HUD, press **Space** or **C**, or use Settings drawer → Snap. Optional gesture shutter (hold dual pinch 2s) can be enabled in Settings.
 4. **Wink** to cycle through prism shader effects.
 5. **Prism Crisscross** ripples and Kaleidoscope centre follow your index finger.
 6. Settings (gear icon): effect sliders, skin smoothing, overlays, capture photo, install app.
@@ -126,7 +126,7 @@ Pick a mode in the game dock. A question appears at the top and three answer orb
 
 | Tool | How to access |
 |---|---|
-| **Capture Photo** | Settings drawer → Snap, Pinch Shutter gesture, camera button in HUD, or `Space`/`C` hotkeys |
+| **Capture Photo** | Camera button in HUD, `Space`/`C` hotkeys, Settings drawer → Snap, or optional 2s Gesture Shutter |
 | **Fullscreen** | Settings drawer → Go |
 | **Mirror Toggle** | Top-right arrow icon |
 | **Camera Switch** | Top-right camera icon (cycles between available devices) |

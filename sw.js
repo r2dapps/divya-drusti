@@ -1,5 +1,5 @@
 // DIVYA service worker - app shell + runtime cache for MediaPipe (CDN + models) so it works offline after first load
-const VERSION = "divya-v8";
+const VERSION = "divya-v9";
 const SHELL = [
   "./",
   "./index.html",
@@ -55,9 +55,10 @@ self.addEventListener("fetch", e => {
       return fetch(req)
         .then(r => {
           if (!r || !r.ok) {
-            // Fallback for avatar.glb if requested at root or assets/
-            if (r && r.status === 404 && url.pathname.endsWith("/avatar.glb")) {
-              const alt = url.pathname.includes("/assets/") ? "./avatar.glb" : "./assets/avatar.glb";
+            // Fallback for any .glb requested at root
+            if (r && r.status === 404 && url.pathname.endsWith(".glb")) {
+              const file = url.pathname.split("/").pop();
+              const alt = url.pathname.includes("/assets/") ? "./" + file : "./assets/" + file;
               return fetch(alt)
                 .then(r2 => {
                   if (r2 && r2.ok && !r2.bodyUsed) {

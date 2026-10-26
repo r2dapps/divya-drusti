@@ -335,44 +335,140 @@
         vec3 fx = rawColor.rgb;
 
         if (u_filter == 0) {
-          // 0: SPECTRAL PRISM (True Optical Glass Refraction, Cauchy Dispersion & Caustic Beams)
+          // 0: SPECTRAL PRISM (Physical Optical Crystal, 7-Band Cauchy Dispersion & Caustic Refraction)
           vec2 center = (u_v0 + u_v1 + u_v2 + u_v3) * 0.25;
           vec2 toCenter = v_screenUv - center;
-          float distCenter = length(toCenter * asp2);
-          vec2 refrDir = normalize(toCenter + 1e-5);
+          vec2 toCenterAsp = toCenter * asp2;
+          float distCenter = length(toCenterAsp);
+          vec2 refrDir = distCenter > 1e-4 ? normalize(toCenterAsp) / asp2 : vec2(0.0, 1.0);
 
-          // TouchDesigner interactive hand ripple & dispersion wave
+          // Diagonal facet geometry (cut crystal prism facets)
+          vec2 uvd = v_screenUv - center;
+          float facetX = uvd.x * 0.7071 - uvd.y * 0.7071;
+          float facetY = uvd.x * 0.7071 + uvd.y * 0.7071;
+          vec2 facetNormal = normalize(vec2(sign(facetX) * 0.35, sign(facetY) * 0.35) + toCenter * 1.4 + 1e-4);
+
+          // TouchDesigner interactive hand ripple
           float ripple = 1.0;
           if (u_pointerOn > 0.5) {
             float pDist = length((v_screenUv - u_pointer) * asp2);
-            ripple += 2.6 * sin(pDist * 28.0 - u_time * 4.5) * exp(-pDist * 6.5);
+            ripple += 2.8 * sin(pDist * 32.0 - u_time * 5.0) * exp(-pDist * 7.0);
           }
 
-          // Cauchy spectral dispersion: red, green, blue refract at distinct wavelength angles
-          float disp = (0.018 * u_splatRadius + distCenter * 0.024) * ripple;
-          vec2 offR = refrDir * (disp * 0.68);
-          vec2 offG = refrDir * (disp * 1.00);
-          vec2 offB = refrDir * (disp * 1.36);
+          // Edge bevel refraction normal (light bends steeply at glass boundary)
+          float bevelWidth = 0.08;
+          float bevelDist = clamp(dEdge / bevelWidth, 0.0, 1.0);
+          float bevelCurv = 1.0 - sqrt(bevelDist);
+          vec2 refrVec = mix(facetNormal * 0.022, refrDir * 0.042, 0.65) * ripple;
+          refrVec += refrDir * (bevelCurv * 0.038);
 
-          vec3 spectralCol;
-          spectralCol.r = texture(u_video, getCameraUv(v_screenUv - offR)).r;
-          spectralCol.g = texture(u_video, getCameraUv(v_screenUv - offG)).g;
-          spectralCol.b = texture(u_video, getCameraUv(v_screenUv - offB)).b;
+          // Base Cauchy dispersion magnitude scaled by user slider
+          float dispBase = (0.016 * u_splatRadius + distCenter * 0.026 + bevelCurv * 0.04) * ripple;
 
-          // Prism facet internal reflections and rainbow caustic rays
-          float facetAngle = atan(toCenter.y, toCenter.x);
-          float facetRays = pow(abs(cos(facetAngle * 3.0 + u_time * 0.35)), 7.0);
-          vec3 rainbowCaustic = 0.5 + 0.5 * cos(6.2831 * (vec3(0.0, 0.33, 0.67) + facetAngle * 0.5 + u_time * 0.25));
+          // 7-Band Continuous Spectral Sampling (Red to Violet)
+          // CIE approx wavelengths: 700nm, 620nm, 580nm, 530nm, 490nm, 450nm, 400nm
+          vec3 specAccum = vec3(0.0);
+          vec3 weightAccum = vec3(0.0);
 
-          // Edge total internal reflection luminance
-          float edgeGlow = smoothstep(0.06, 0.0, dEdge) * u_edgeGain;
+          // Band 1: Deep Red (700nm)
+          vec2 uv1 = getCameraUv(v_screenUv - refrVec - refrDir * (dispBase * 1.45));
+          vec3 w1 = vec3(1.0, 0.05, 0.0);
+          specAccum += texture(u_video, uv1).rgb * w1;
+          weightAccum += w1;
 
-          fx = spectralCol * (0.92 + 0.18 * facetRays)
-             + rainbowCaustic * (facetRays * 0.45 * u_splatRadius + edgeGlow * 0.65)
-             + vec3(edgeGlow * 0.35);
+          // Band 2: Orange (620nm)
+          vec2 uv2 = getCameraUv(v_screenUv - refrVec - refrDir * (dispBase * 0.95));
+          vec3 w2 = vec3(1.0, 0.48, 0.0);
+          specAccum += texture(u_video, uv2).rgb * w2;
+          weightAccum += w2;
+
+          // Band 3: Amber / Yellow (580nm)
+          vec2 uv3 = getCameraUv(v_screenUv - refrVec - refrDir * (dispBase * 0.45));
+          vec3 w3 = vec3(0.9, 0.9, 0.05);
+          specAccum += texture(u_video, uv3).rgb * w3;
+          weightAccum += w3;
+
+          // Band 4: Pure Green (530nm, optical center)
+          vec2 uv4 = getCameraUv(v_screenUv - refrVec);
+          vec3 w4 = vec3(0.1, 1.0, 0.2);
+          specAccum += texture(u_video, uv4).rgb * w4;
+          weightAccum += w4;
+
+          // Band 5: Cyan (490nm)
+          vec2 uv5 = getCameraUv(v_screenUv - refrVec + refrDir * (dispBase * 0.50));
+          vec3 w5 = vec3(0.0, 0.9, 0.95);
+          specAccum += texture(u_video, uv5).rgb * w5;
+          weightAccum += w5;
+
+          // Band 6: Royal Blue (450nm)
+          vec2 uv6 = getCameraUv(v_screenUv - refrVec + refrDir * (dispBase * 1.05));
+          vec3 w6 = vec3(0.1, 0.35, 1.0);
+          specAccum += texture(u_video, uv6).rgb * w6;
+          weightAccum += w6;
+
+          // Band 7: Deep Violet (400nm)
+          vec2 uv7 = getCameraUv(v_screenUv - refrVec + refrDir * (dispBase * 1.60));
+          vec3 w7 = vec3(0.65, 0.05, 1.0);
+          specAccum += texture(u_video, uv7).rgb * w7;
+          weightAccum += w7;
+
+          vec3 refracted = specAccum / weightAccum;
+
+          // Prismatic Internal Caustics & Sweeping Rainbow Flares
+          float facetAngle = atan(toCenterAsp.y, toCenterAsp.x);
+          float causticPattern = sin(dot(toCenterAsp, vec2(cos(u_time * 0.4), sin(u_time * 0.4))) * 38.0
+                                    + sin(facetAngle * 5.0 + u_time * 0.5) * 3.5);
+          float causticRays = pow(abs(causticPattern), 6.0) * (0.6 + 0.4 * sin(u_time * 2.0));
+          vec3 causticColor = 0.5 + 0.5 * cos(6.28318 * (vec3(0.0, 0.33, 0.67) + facetAngle * 0.4 + u_time * 0.22));
+
+          // Crystal Specular Sheen (sweeping light bar across glass pane)
+          float lightSweep = dot(v_screenUv - vec2(0.5), vec2(0.7071, 0.7071));
+          float glint = pow(max(0.0, sin(lightSweep * 14.0 - u_time * 1.8 + sin(distCenter * 10.0))), 16.0);
+
+          // Total Internal Reflection (TIR) Rim Lighting
+          float rimGlow = smoothstep(0.08, 0.005, dEdge) * u_edgeGain;
+
+          fx = refracted * (0.94 + 0.22 * causticRays)
+             + causticColor * (causticRays * 0.55 * u_splatRadius + rimGlow * 0.6)
+             + vec3(glint * 0.45 + rimGlow * 0.38);
 
         } else if (u_filter == 1) {
-          // 1: PRISM CRISSCROSS (two diagonal glass lattices, chromatic dispersion, hand ripple)
+          // 1: BENDY HOLOGRAPHIC FABRIC (TouchDesigner Wavy Iridescent Refraction)
+          vec2 wave = vec2(
+            sin(v_screenUv.y * 22.0 + u_time * 3.2) * 0.016 + cos(v_screenUv.x * 14.0 - u_time * 2.0) * 0.012,
+            cos(v_screenUv.x * 22.0 - u_time * 2.8) * 0.016 + sin(v_screenUv.y * 14.0 + u_time * 2.4) * 0.012
+          );
+          vec2 wUv = v_screenUv + wave;
+          vec3 cR = texture(u_video, getCameraUv(wUv + vec2(0.012, 0.0))).rgb;
+          vec3 cG = texture(u_video, getCameraUv(wUv)).rgb;
+          vec3 cB = texture(u_video, getCameraUv(wUv - vec2(0.012, 0.0))).rgb;
+          vec3 chroma = vec3(cR.r, cG.g, cB.b);
+          float lum = getLuminance(chroma);
+          vec3 irid = 0.5 + 0.5 * cos(6.28318 * (lum * 1.8 + vec3(0.0, 0.33, 0.67) + u_time * 0.25));
+          float spec = pow(max(0.0, sin(v_screenUv.y * 18.0 + u_time * 3.5 + v_screenUv.x * 8.0)), 6.0);
+          fx = mix(chroma, irid * 1.35, 0.42) + vec3(spec * 0.45);
+
+        } else if (u_filter == 2) {
+          // 2: STRETCHY LIQUID BUBBLE (TouchDesigner Iridescent Bubble Membrane)
+          vec2 center = (Q0 + Q1 + Q2 + Q3) * 0.25;
+          vec2 delta = P - center;
+          float dist = length(delta);
+          float wobble = sin(dist * 18.0 - u_time * 3.8) * 0.02;
+          vec2 bUv = v_screenUv + normalize(delta + vec2(1e-4)) * wobble;
+          vec3 bR = texture(u_video, getCameraUv(bUv + vec2(0.016, 0.005))).rgb;
+          vec3 bG = texture(u_video, getCameraUv(bUv)).rgb;
+          vec3 bB = texture(u_video, getCameraUv(bUv - vec2(0.016, 0.005))).rgb;
+          vec3 bubbleCol = vec3(bR.r, bG.g, bB.b);
+          float rim = smoothstep(0.0, 0.35, dist);
+          vec3 thinFilm = 0.5 + 0.5 * cos(6.28318 * (dist * 2.5 + vec3(0.1, 0.45, 0.8) + u_time * 0.2));
+          fx = mix(bubbleCol, thinFilm * 1.4, rim * 0.55);
+
+        } else if (u_filter == 3) {
+          // 3: PROXIMITY POP / PLEXUS PASS-THROUGH
+          fx = rawColor.rgb;
+
+        } else if (u_filter == 4) {
+          // 4: PRISM CRISSCROSS (two diagonal glass lattices, chromatic dispersion, hand ripple)
           float asp = u_resolution.x / u_resolution.y;
           float sc = 8.0 + 16.0 * u_density;
           vec2 q = v_screenUv * vec2(asp, 1.0) * sc;
@@ -393,7 +489,7 @@
           float facet = 0.82 + 0.35 * hash11(ia * 7.0 + ib);
           fx = col * facet + rainbow * max(eA, eB) * 0.5 * u_edgeGain + vec3(eA * eB) * 0.7;
 
-        } else if (u_filter == 2) {
+        } else if (u_filter == 5) {
           // 2: KALEIDOSCOPE (centre follows index finger, 6-fold optical symmetry)
           float asp = u_resolution.x / u_resolution.y;
           vec2 c = u_pointerOn > 0.5 ? u_pointer : vec2(0.5);
@@ -410,7 +506,7 @@
           k.b = texture(u_video, getCameraUv(uv * 0.988 + 0.006)).b;
           fx = k * 1.12;
 
-        } else if (u_filter == 3) {
+        } else if (u_filter == 6) {
           // 3: ZOOM LENS (magnifies the area inside the prism, slight lens fringe)
           vec2 c = (u_v0 + u_v1 + u_v2 + u_v3) * 0.25;
           vec2 d = v_screenUv - c;
@@ -421,7 +517,7 @@
           zc.b = texture(u_video, getCameraUv(clamp(c + d / (z * 0.988), 0.0, 1.0))).b;
           fx = zc;
 
-        } else if (u_filter == 4) {
+        } else if (u_filter == 7) {
           // 4: NEON EDGE (hue-cycling edge glow)
           float lum = getLuminance(rawColor.rgb);
           float e1 = getSobel(v_screenUv, texel * 1.5);
@@ -429,7 +525,7 @@
           vec3 hue = 0.5 + 0.5 * cos(6.2831 * (vec3(0.0, 0.33, 0.67) + lum * 0.6 + v_screenUv.x * 0.3 + u_time * 0.15));
           fx = hue * clamp(e1 * 2.2, 0.0, 1.0) * 1.5 + hue * e2 * 0.6 + rawColor.rgb * 0.1;
 
-        } else if (u_filter == 5) {
+        } else if (u_filter == 8) {
           // 5: GAUSSIAN SPLATS (Radiant spherical falloff)
           float density = 50.0 * u_density;
           vec2 gd = vec2(density * u_resolution.x / u_resolution.y, density);
@@ -444,7 +540,7 @@
           float alpha = exp(-4.2 * (d / r) * (d / r));
           fx = mix(vec3(0.03, 0.04, 0.06), centerColor * 1.45, clamp(alpha, 0.0, 1.0));
 
-        } else if (u_filter == 6) {
+        } else if (u_filter == 9) {
           // 6: TOPOLOGICAL MESH / POINT CLOUD (Elevation isolines)
           float grid = 64.0 * u_density;
           vec2 gg = vec2(grid * u_resolution.x / u_resolution.y, grid);
@@ -459,7 +555,7 @@
           vec3 isoline = mix(vec3(0.1, 0.4, 0.9), vec3(0.9, 0.2, 0.5), lum);
           fx = mix(vec3(0.04, 0.05, 0.08), isoline * 1.3, smoothstep(0.4, 0.1, dotDist) + ring * 0.35);
 
-        } else if (u_filter == 7) {
+        } else if (u_filter == 10) {
           // 7: DEPTH COLOR (AI person mask + scene gradient -> turbo depth map with contour lines)
           vec2 mp = vec2(2.0 / 256.0);
           vec3 mm = (texture(u_mask, camUv).rgb * 2.0 + texture(u_mask, camUv + vec2(mp.x, 0.0)).rgb + texture(u_mask, camUv - vec2(mp.x, 0.0)).rgb
@@ -473,7 +569,7 @@
           float band = abs(fract(depth * 14.0) - 0.5);
           fx = mix(dc, rawColor.rgb, 0.18) * (1.0 - (1.0 - smoothstep(0.0, 0.04, band)) * 0.25);
 
-        } else if (u_filter == 8) {
+        } else if (u_filter == 11) {
           // 8: QUANTUM GLITCH (RGB Aberration & CRT Scanlines)
           vec2 off = vec2(texel.x * 14.0, 0.0);
           float r = texture(u_video, getCameraUv(v_screenUv + off)).r;
@@ -482,27 +578,27 @@
           float scan = mod(gl_FragCoord.y, 3.0) < 1.0 ? 0.82 : 1.0;
           fx = vec3(r, g, b) * scan;
 
-        } else if (u_filter == 9) {
+        } else if (u_filter == 12) {
           // 9: CYBER X-RAY (Fluoroscopic Radiometry)
           float lum = getLuminance(rawColor.rgb);
           float edge = getSobel(v_screenUv, texel);
           vec3 xray = vec3(1.0 - lum) * vec3(0.55, 0.80, 0.98) + vec3(edge * 1.9);
           fx = clamp(xray, 0.0, 1.0);
 
-        } else if (u_filter == 10) {
+        } else if (u_filter == 13) {
           // 10: HOLO MATRIX (Phosphor Matrix Grid)
           float lum = getLuminance(rawColor.rgb);
           float grid = step(0.92, fract(v_screenUv.x * 80.0 * u_resolution.x / u_resolution.y)) + step(0.92, fract(v_screenUv.y * 80.0));
           vec3 phosphor = vec3(0.12, 0.95, 0.65) * lum;
           fx = mix(phosphor, vec3(0.85, 1.0, 0.9), grid * 0.4);
 
-        } else if (u_filter == 11) {
+        } else if (u_filter == 14) {
           // 11: THERMAL IR (Radiometric false-color heat map)
           float lum = getLuminance(rawColor.rgb);
           float scanline = mod(gl_FragCoord.y, 4.0) < 1.0 ? 0.90 : 1.0;
           fx = getThermal(lum) * scanline;
 
-        } else if (u_filter == 12) {
+        } else if (u_filter == 15) {
           // 12: ANIME CEL SHADING
           float edge = getSobel(v_screenUv, texel);
           float lum = getLuminance(rawColor.rgb);
@@ -768,7 +864,7 @@
         vCtx.restore();
       }
 
-      // 3. SCENE 1: SPATIAL PRISM QUAD RETICLE
+      // 3. SCENE 1: SPATIAL PRISM QUAD RETICLE (Clean Outline & Precision Corner Nodes)
       if (state.prismOpacity > 0.01 && state.scene === "PRISM") {
         vCtx.save();
         vCtx.globalAlpha = state.prismOpacity;
@@ -778,9 +874,13 @@
         const pBR = { x: state.corners.br.x * w, y: state.corners.br.y * h };
         const pBL = { x: state.corners.bl.x * w, y: state.corners.bl.y * h };
 
-        vCtx.strokeStyle = state.shutterArmed ? "rgba(16, 185, 129, 0.95)" : state.prismLocked ? "rgba(56, 189, 248, 0.95)" : "rgba(59, 130, 246, 0.85)";
-        vCtx.lineWidth = 2.0;
-        vCtx.setLineDash([5, 5]);
+        // Color coding: emerald on shutter armed, amber gold on pinch lock, platinum pearl on active tracking
+        const mainColor = state.shutterArmed ? "rgba(16, 185, 129, 0.95)" : state.prismLocked ? "rgba(245, 158, 11, 0.95)" : "rgba(248, 250, 252, 0.88)";
+        const haloColor = state.shutterArmed ? "rgba(16, 185, 129, 0.28)" : state.prismLocked ? "rgba(245, 158, 11, 0.28)" : "rgba(248, 250, 252, 0.22)";
+
+        // Continuous clean quad outline
+        vCtx.strokeStyle = mainColor;
+        vCtx.lineWidth = 1.8;
         vCtx.beginPath();
         vCtx.moveTo(pTL.x, pTL.y);
         vCtx.lineTo(pTR.x, pTR.y);
@@ -788,20 +888,30 @@
         vCtx.lineTo(pBL.x, pBL.y);
         vCtx.closePath();
         vCtx.stroke();
-        vCtx.setLineDash([]);
 
-        // Precision Corner Handles
-        [pTL, pTR, pBR, pBL].forEach(c => {
-          vCtx.fillStyle = "#3b82f6";
+        // Precision corner dots (outer soft glow + solid inner node)
+        [pTL, pTR, pBR, pBL].forEach(pt => {
+          // Soft luminous outer halo
+          vCtx.fillStyle = haloColor;
           vCtx.beginPath();
-          vCtx.arc(c.x, c.y, 5.0, 0, Math.PI * 2);
+          vCtx.arc(pt.x, pt.y, 6.0, 0, Math.PI * 2);
+          vCtx.fill();
+
+          // Crisp solid center node
+          vCtx.fillStyle = mainColor;
+          vCtx.beginPath();
+          vCtx.arc(pt.x, pt.y, 3.2, 0, Math.PI * 2);
           vCtx.fill();
         });
+
         vCtx.restore();
       }
 
       if (state.scene === "MAKEUP") drawMakeup(w, h);
       if (state.scene === "MYSTIC") drawMystic(w, h);
+      if (state.scene === "PRISM" && state.filter === "PRISM_PLEXUS" && state.prismOpacity > 0.01) {
+        drawProximityPOP(vCtx, w, h, performance.now() * 0.001);
+      }
       if (state.scene === "GAME") drawGame(w, h);
       if (state.showFaceMesh && !state.capture && state.faceLandmarks) drawFaceMesh();
       if (state.shotFlash > 0) { vCtx.fillStyle = `rgba(255,255,255,${state.shotFlash * 0.6})`; vCtx.fillRect(0, 0, w, h); state.shotFlash -= 0.08; }
@@ -813,7 +923,8 @@
     const mkCanvas = document.createElement("canvas"), mkCtx = mkCanvas.getContext("2d");
     let prevHair = null, prevSkin = null, prevPerson = null;
     Object.assign(state, { trails: {}, lives: 3, streak: 0, level: 1, over: false, flash: 0, rings: [], headTrail: [],
-      maskDirty: false, capture: false, lastHandsTime: -1e9, prevActive: false, shutterArmed: false, pinchSince: 0, lastShot: -1e9, shotFlash: 0, zoom: 2.5, skinSmooth: 0.6, best: 0, gmode: "ARCADE", fbGood: true });
+      maskDirty: false, capture: false, lastHandsTime: -1e9, prevActive: false, shutterArmed: false, gestureShutterEnabled: false, pinchSince: 0, lastShot: -1e9, shotFlash: 0, zoom: 2.5, skinSmooth: 0.6, best: 0, gmode: "ARCADE", fbGood: true,
+      lipOpacity: 0.35, plexusRadius: 65, flockSpeed: 1.0, gameGalaxy: false });
     try { state.best = +localStorage.getItem("divya_best") || 0; } catch (e) {}
     const badge = t => { const b = document.getElementById("status-badge"); if (b.textContent !== t) b.textContent = t; };
     function glow(c, x, y, r, a, b) {
@@ -861,7 +972,7 @@
       const L = state.faceLandmarks, P = i => landmarkToScreen(L[i]), c = mkCtx;
       const fw = Math.hypot(P(234).x - P(454).x, P(234).y - P(454).y);
       if (state.lipColor !== "none") {
-        c.save(); c.shadowColor = state.lipColor; c.shadowBlur = fw * 0.02; c.fillStyle = state.lipColor; c.globalAlpha = 0.72;
+        c.save(); c.shadowColor = state.lipColor; c.shadowBlur = fw * 0.02; c.fillStyle = state.lipColor; c.globalAlpha = (state.lipOpacity != null ? state.lipOpacity : 0.35);
         c.beginPath();
         LIPS_OUTER.forEach((idx, i) => { const p = P(idx); i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y); });
         LIPS_INNER.slice().reverse().forEach(idx => { const p = P(idx); c.lineTo(p.x, p.y); });
@@ -1100,24 +1211,150 @@
       c.save(); c.globalCompositeOperation = "lighter"; c.drawImage(fb.c, 0, 0); c.restore();
     }
 
-    /* Flocking: follow (index tips) + repel (fists) + flow-field noise */
+    /* Bioluminescent Boid Fish Swarm (Cosmic Schooling Particle Simulation):
+       2,400 schooling micro-boids with aquatic tail undulation, vortex gravitation, and shockwave scatter */
     const flock = [];
+    const FLOCK_COUNT = 2200;
+
     function drawFlock(c, w, h, t) {
-      badge("FLOW SWARM · swarm follows your index finger · pinch = tighter · fist = scatter");
-      if (!flock.length) for (let i = 0; i < 700; i++) flock.push({ x: Math.random() * w, y: Math.random() * h, vx: 0, vy: 0 });
-      const A = [], Rp = [];
-      state.handData.forEach(hd => { const q = handInfo(hd); if (q.open < 0.2) Rp.push({ x: q.palm.x, y: q.palm.y, r: q.raw * 2.4 }); else A.push({ x: q.tips[1].x, y: q.tips[1].y, k: q.pinch < 0.45 ? 2.5 : 1 }); });
-      c.lineCap = "round"; c.lineWidth = 1.6;
-      for (const b of flock) {
-        const a = Math.sin(b.x * 0.006 + t * 0.7) * Math.cos(b.y * 0.007 - t * 0.5) * TAU;
-        b.vx += Math.cos(a) * 0.16; b.vy += Math.sin(a) * 0.16;
-        let best = null, bd = 1e9; for (const q of A) { const d = Math.hypot(q.x - b.x, q.y - b.y); if (d < bd) { bd = d; best = q; } }
-        if (best) { const dx = best.x - b.x, dy = best.y - b.y, d = bd + 1; b.vx += (dx / d * 0.5 - dy / d * 0.35) * best.k; b.vy += (dy / d * 0.5 + dx / d * 0.35) * best.k; }
-        for (const r of Rp) { const dx = b.x - r.x, dy = b.y - r.y, d = Math.hypot(dx, dy) + 1; if (d < r.r) { b.vx += dx / d * 3; b.vy += dy / d * 3; } }
-        b.vx *= 0.95; b.vy *= 0.95; const sp = Math.hypot(b.vx, b.vy); if (sp > 8) { b.vx *= 8 / sp; b.vy *= 8 / sp; }
-        b.x += b.vx; b.y += b.vy; if (b.x < 0) b.x += w; else if (b.x > w) b.x -= w; if (b.y < 0) b.y += h; else if (b.y > h) b.y -= h;
-        c.strokeStyle = `hsla(${190 + sp * 14},100%,${55 + sp * 3}%,0.8)`; c.beginPath(); c.moveTo(b.x - b.vx * 2.5, b.y - b.vy * 2.5); c.lineTo(b.x, b.y); c.stroke();
+      badge("BIOLUMINESCENT SWARM · schooling fish swarm · pinch = orbital vortex · fist = shockwave scatter");
+      if (!flock.length) {
+        for (let i = 0; i < FLOCK_COUNT; i++) {
+          flock.push({
+            x: Math.random() * w,
+            y: Math.random() * h,
+            vx: (Math.random() - 0.5) * 2,
+            vy: (Math.random() - 0.5) * 2,
+            z: 0.5 + Math.random() * 0.9, // depth scale
+            phase: Math.random() * TAU,
+            id: i
+          });
+        }
       }
+
+      const attractors = [];
+      const repellers = [];
+      state.handData.forEach(hd => {
+        const q = handInfo(hd);
+        if (q.open < 0.22) {
+          // Fist / push: scatter shockwave
+          repellers.push({ x: q.palm.x, y: q.palm.y, r: Math.max(120, q.raw * 2.8) });
+        } else {
+          // Pinch = tight gravitational vortex; Open hand = schooling follow
+          const isPinch = q.pinch < 0.45;
+          attractors.push({
+            x: q.tips[1].x,
+            y: q.tips[1].y,
+            pinch: isPinch,
+            k: isPinch ? 3.4 : 1.2,
+            vortex: isPinch ? 2.8 : 0.8
+          });
+        }
+      });
+
+      c.save();
+      c.globalCompositeOperation = "lighter";
+      c.lineCap = "round";
+
+      for (let i = 0; i < FLOCK_COUNT; i++) {
+        const b = flock[i];
+        const z = b.z;
+
+        // Multi-frequency turbulent flow current (creates organic fluid schooling filaments)
+        const a1 = Math.sin(b.x * 0.0035 + t * 0.6) * Math.cos(b.y * 0.0042 - t * 0.45) * TAU;
+        const a2 = Math.cos(b.x * 0.008 - t * 0.3) * Math.sin(b.y * 0.0075 + t * 0.5) * Math.PI;
+        b.vx += (Math.cos(a1) * 0.22 + Math.cos(a2) * 0.12) * z;
+        b.vy += (Math.sin(a1) * 0.22 + Math.sin(a2) * 0.12) * z;
+
+        // Attractor gravitation and orbital vortex
+        let closestDist = 1e9;
+        let activeAttractor = null;
+        for (let j = 0; j < attractors.length; j++) {
+          const at = attractors[j];
+          const dx = at.x - b.x;
+          const dy = at.y - b.y;
+          const d = Math.hypot(dx, dy);
+          if (d < closestDist) {
+            closestDist = d;
+            activeAttractor = at;
+          }
+        }
+
+        if (activeAttractor) {
+          const dx = activeAttractor.x - b.x;
+          const dy = activeAttractor.y - b.y;
+          const dist = closestDist + 8.0;
+          const nx = dx / dist;
+          const ny = dy / dist;
+
+          // Pull inwards + spin orthogonally (vortex swirl)
+          const pullForce = (activeAttractor.pinch ? Math.min(4.5, 380 / dist) : Math.min(2.5, 200 / dist)) * activeAttractor.k * 0.4;
+          const swirlForce = activeAttractor.vortex * (activeAttractor.pinch ? 1.6 : 0.8);
+
+          b.vx += (nx * pullForce - ny * swirlForce) * z;
+          b.vy += (ny * pullForce + nx * swirlForce) * z;
+        }
+
+        // Repeller panic scattering
+        for (let j = 0; j < repellers.length; j++) {
+          const rep = repellers[j];
+          const dx = b.x - rep.x;
+          const dy = b.y - rep.y;
+          const dist = Math.hypot(dx, dy) + 0.1;
+          if (dist < rep.r) {
+            const push = (1.0 - dist / rep.r) * 6.0;
+            b.vx += (dx / dist) * push;
+            b.vy += (dy / dist) * push;
+          }
+        }
+
+        // Velocity damping and speed limiting
+        b.vx *= 0.945;
+        b.vy *= 0.945;
+        const speed = Math.hypot(b.vx, b.vy);
+        const maxSpeed = 12.0 * z * (state.flockSpeed || 1.0);
+        if (speed > maxSpeed) {
+          b.vx = (b.vx / speed) * maxSpeed;
+          b.vy = (b.vy / speed) * maxSpeed;
+        }
+
+        // Screen boundary wrapping
+        b.x += b.vx;
+        b.y += b.vy;
+        if (b.x < -20) b.x = w + 20;
+        else if (b.x > w + 20) b.x = -20;
+        if (b.y < -20) b.y = h + 20;
+        else if (b.y > h + 20) b.y = -20;
+
+        // Aquatic tail flick undulation
+        const tailAngle = Math.atan2(b.vy, b.vx);
+        const wag = Math.sin(t * 15.0 + b.phase) * (1.2 * z);
+        const tailX = b.x - Math.cos(tailAngle) * (speed * 2.8 + 3.0) + Math.sin(tailAngle) * wag;
+        const tailY = b.y - Math.sin(tailAngle) * (speed * 2.8 + 3.0) - Math.cos(tailAngle) * wag;
+
+        // Speed-dependent luminescence & color grading
+        const spRatio = Math.min(1.0, speed / 8.0);
+        const hue = 190 + spRatio * 25; // 190 (deep cyan) -> 215 (cobalt / stellar white)
+        const light = 50 + spRatio * 42; // Up to 92% luminous white on high-speed sprint
+        const alpha = (0.35 + spRatio * 0.55) * Math.min(1.0, z);
+
+        // Motion streak / tail
+        c.lineWidth = (1.0 + spRatio * 1.5) * z;
+        c.strokeStyle = `hsla(${hue}, 95%, ${light}%, ${alpha})`;
+        c.beginPath();
+        c.moveTo(tailX, tailY);
+        c.lineTo(b.x, b.y);
+        c.stroke();
+
+        // Luminous boid head
+        if (spRatio > 0.4 || z > 1.0) {
+          c.fillStyle = `hsla(${hue}, 100%, ${Math.min(96, light + 10)}%, ${alpha * 0.9})`;
+          c.beginPath();
+          c.arc(b.x, b.y, 1.2 * z, 0, TAU);
+          c.fill();
+        }
+      }
+      c.restore();
     }
 
     /* Finger Text: title + subtitle + caption sampled into ~14k particles */
@@ -1164,8 +1401,215 @@
       }
     }
 
+    
+    /* Proximity POP (TouchDesigner Biometric Plexus):
+       Dynamic distance-threshold network across MediaPipe Pose + Hands with dual-tone gradient */
+    function drawProximityPOP(c, w, h, t) {
+      badge("PROXIMITY POP · TouchDesigner biometric plexus network · move hands together");
+      const P = state.poseLandmarks;
+      const H = state.handData;
+      const pts = [];
+
+      const addPt = (x, y, type) => {
+        if (x >= -20 && x <= w + 20 && y >= -20 && y <= h + 20) {
+          pts.push({ x, y, type }); // type: 'hand' | 'head' | 'body'
+        }
+      };
+
+      // 1. Hands landmarks (21 points each hand + interpolated finger segments)
+      if (H && H.length) {
+        H.forEach(hd => {
+          const lms = hd.landmarks;
+          if (!lms) return;
+          lms.forEach(lm => {
+            const pt = landmarkToScreen(lm);
+            addPt(pt.x, pt.y, "hand");
+          });
+          // Mid-finger interpolation for higher mesh density
+          const chains = [
+            [0, 1, 2, 3, 4],
+            [0, 5, 6, 7, 8],
+            [0, 9, 10, 11, 12],
+            [0, 13, 14, 15, 16],
+            [0, 17, 18, 19, 20]
+          ];
+          chains.forEach(ch => {
+            for (let i = 0; i < ch.length - 1; i++) {
+              const a = landmarkToScreen(lms[ch[i]]);
+              const b = landmarkToScreen(lms[ch[i + 1]]);
+              addPt((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, "hand");
+            }
+          });
+        });
+      }
+
+      // 2. Pose landmarks (face + interpolated body contours)
+      if (P && P.length) {
+        // Head / Face
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].forEach(i => {
+          if (P[i] && (P[i].visibility == null || P[i].visibility > 0.35)) {
+            const p = landmarkToScreen(P[i]);
+            addPt(p.x, p.y, "head");
+          }
+        });
+
+        // Skeleton limb interpolation
+        const limbs = [
+          [11, 12, 4], // shoulder bridge (4 subdivisions)
+          [11, 13, 3], [13, 15, 3], // left arm
+          [12, 14, 3], [14, 16, 3], // right arm
+          [11, 23, 4], [12, 24, 4], // torso sides
+          [23, 24, 3], // hip bridge
+          [23, 25, 4], [25, 27, 4], // left leg
+          [24, 26, 4], [26, 28, 4]  // right leg
+        ];
+        limbs.forEach(([i1, i2, subs]) => {
+          if (P[i1] && P[i2] && (P[i1].visibility == null || P[i1].visibility > 0.3) && (P[i2].visibility == null || P[i2].visibility > 0.3)) {
+            const a = landmarkToScreen(P[i1]);
+            const b = landmarkToScreen(P[i2]);
+            for (let s = 0; s <= subs; s++) {
+              const u = s / subs;
+              const jx = Math.sin(t * 3.2 + u * 12) * 2.0;
+              const jy = Math.cos(t * 3.7 + u * 12) * 2.0;
+              addPt(a.x + (b.x - a.x) * u + jx, a.y + (b.y - a.y) * u + jy, "body");
+            }
+          }
+        });
+      }
+
+      if (pts.length < 2) return;
+
+      const maxDist = state.plexusRadius || Math.max(48, Math.min(w, h) * 0.082);
+      const maxDistSq = maxDist * maxDist;
+
+      c.save();
+      c.globalCompositeOperation = "lighter";
+
+      // Proximity POP connections
+      c.lineWidth = 1.3;
+      const n = pts.length;
+      for (let i = 0; i < n; i++) {
+        const p1 = pts[i];
+        for (let j = i + 1; j < n; j++) {
+          const p2 = pts[j];
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < maxDistSq) {
+            const d = Math.sqrt(d2);
+            const alpha = Math.pow(1 - d / maxDist, 1.35) * 0.88;
+
+            if (p1.type === "hand" || p2.type === "hand") {
+              c.strokeStyle = `rgba(244, 63, 178, ${alpha})`; // Magenta/Pink for hands
+            } else if (p1.type === "head" || p2.type === "head") {
+              c.strokeStyle = `rgba(217, 70, 239, ${alpha})`; // Violet for head
+            } else {
+              c.strokeStyle = `rgba(224, 242, 254, ${alpha * 0.9})`; // Frost ice-white/cyan for body
+            }
+
+            c.beginPath();
+            c.moveTo(p1.x, p1.y);
+            c.lineTo(p2.x, p2.y);
+            c.stroke();
+          }
+        }
+      }
+
+      // Biometric POP nodes (TouchDesigner square pixel POP aesthetic)
+      pts.forEach(p => {
+        let nodeColor, haloColor;
+        if (p.type === "hand") {
+          nodeColor = "#f43fb2";
+          haloColor = "rgba(244, 63, 178, 0.4)";
+        } else if (p.type === "head") {
+          nodeColor = "#d946ef";
+          haloColor = "rgba(217, 70, 239, 0.4)";
+        } else {
+          nodeColor = "#e0f2fe";
+          haloColor = "rgba(186, 230, 253, 0.35)";
+        }
+
+        // Circular halo
+        c.fillStyle = haloColor;
+        c.beginPath();
+        c.arc(p.x, p.y, 4.5, 0, TAU);
+        c.fill();
+
+        // High-contrast central square node
+        c.fillStyle = nodeColor;
+        c.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
+      });
+
+      c.restore();
+    }
+
+    
+    // Procedural Cosmic Galaxy Backdrop for Mystic Jutsu Mode
+    function drawGalaxyBackground(c, w, h, t) {
+      const bg = c.createRadialGradient(w * 0.5, h * 0.48, 15, w * 0.5, h * 0.5, Math.max(w, h) * 0.85);
+      bg.addColorStop(0, "#090d24");
+      bg.addColorStop(0.38, "#050716");
+      bg.addColorStop(0.72, "#020308");
+      bg.addColorStop(1.0, "#000002");
+      c.fillStyle = bg;
+      c.fillRect(0, 0, w, h);
+
+      // Swirling cosmic nebulae
+      c.save();
+      c.globalCompositeOperation = "screen";
+      const nebulae = [
+        { hue: 225, r: 0.48, sx: 0.18, sy: 0.12, sp: 0.12 },
+        { hue: 285, r: 0.42, sx: -0.15, sy: 0.14, sp: -0.09 },
+        { hue: 190, r: 0.38, sx: 0.12, sy: -0.16, sp: 0.15 }
+      ];
+      nebulae.forEach((neb, idx) => {
+        const ang = t * neb.sp + idx * 2.1;
+        const nx = w * 0.5 + Math.cos(ang) * (w * neb.sx);
+        const ny = h * 0.5 + Math.sin(ang) * (h * neb.sy);
+        const rad = Math.max(w, h) * neb.r;
+        const g = c.createRadialGradient(nx, ny, 0, nx, ny, rad);
+        g.addColorStop(0, `hsla(${neb.hue}, 85%, 26%, 0.45)`);
+        g.addColorStop(0.45, `hsla(${neb.hue + 25}, 90%, 14%, 0.20)`);
+        g.addColorStop(1, "transparent");
+        c.fillStyle = g;
+        c.fillRect(0, 0, w, h);
+      });
+
+      // Twinkling starfield
+      if (!state.stars || state.starsW !== w || state.starsH !== h) {
+        state.starsW = w;
+        state.starsH = h;
+        state.stars = [];
+        for (let i = 0; i < 220; i++) {
+          state.stars.push({
+            x: Math.random() * w,
+            y: Math.random() * h,
+            r: Math.random() < 0.12 ? (1.6 + Math.random() * 0.8) : (0.5 + Math.random() * 0.8),
+            twinkle: Math.random() * TAU,
+            color: Math.random() < 0.2 ? "#93c5fd" : Math.random() < 0.4 ? "#fbcfe8" : "#ffffff"
+          });
+        }
+      }
+      for (let i = 0; i < state.stars.length; i++) {
+        const st = state.stars[i];
+        const alpha = 0.35 + Math.sin(t * 3.0 + st.twinkle) * 0.35;
+        c.globalAlpha = Math.max(0.12, alpha);
+        c.fillStyle = st.color;
+        c.beginPath();
+        c.arc(st.x, st.y, st.r, 0, TAU);
+        c.fill();
+      }
+      c.restore();
+    }
+
     function drawMystic(w, h) {
       const c = vCtx, t = (state.mandalaAngle += 0.035);
+      if (state.mysticGalaxy) {
+        c.save();
+        c.globalCompositeOperation = "source-over";
+        drawGalaxyBackground(c, w, h, t);
+        c.restore();
+      }
       c.save(); c.globalCompositeOperation = "lighter";
       if (state.spell === "FLOW") drawFlow(c, t);
       else if (state.spell === "ALCHEMY") drawAlchemy(c, t);
@@ -1173,6 +1617,7 @@
       else if (state.spell === "TEXT") drawTextFX(c, w, h);
       else if (state.spell === "FEEDBACK") drawFeedback(c, w, h, t);
       else if (state.spell === "FLOCK") drawFlock(c, w, h, t);
+      else if (state.spell === "PLEXUS") drawProximityPOP(c, w, h, t);
       else state.handData.forEach(hd => {
         const q = handInfo(hd);
         c.save(); c.globalCompositeOperation = "lighter";
@@ -1314,6 +1759,12 @@
     function ring(x, y, color) { state.rings.push({ x, y, r: 10, life: 1, color }); }
     function drawGame(w, h) {
       const c = vCtx, t = performance.now() / 1000;
+      if (state.gameGalaxy) {
+        c.save();
+        c.globalCompositeOperation = "source-over";
+        drawGalaxyBackground(c, w, h, t);
+        c.restore();
+      }
       const head = state.faceLandmarks ? landmarkToScreen(state.faceLandmarks[1]) : null;
       const hands = state.handData.map(hd => landmarkToScreen(hd.landmarks[8]));
       const open = state.jawOpen > 0.4, mult = Math.min(5, 1 + Math.floor(state.streak / 5));
@@ -1442,12 +1893,12 @@
         }
         const loader = new GLTFLoader();
         let gltf = null;
-        const targetSrc = src || "./assets/avatar.glb";
+        const targetSrc = src || AV.currentModel || "./assets/avatar2.glb"; AV.currentModel = targetSrc;
         try {
           gltf = await loader.loadAsync(targetSrc);
         } catch (err1) {
-          if (!src || src.includes("avatar.glb")) {
-            const fallbackSrc = targetSrc.includes("assets/") ? "./avatar.glb" : "./assets/avatar.glb";
+          if (!src || src.includes("avatar")) {
+            const fallbackSrc = targetSrc.includes("avatar2") ? "./assets/avatar.glb" : "./assets/avatar2.glb";
             gltf = await loader.loadAsync(fallbackSrc);
           } else {
             throw err1;
@@ -1460,48 +1911,128 @@
     function avatarBuild(root) {
       const T = AV.T; root.updateMatrixWorld(true);
       if (AV.rig) AV.scene.remove(AV.rig);
-      const meshes = []; root.traverse(o => { if (o.isMesh) meshes.push(o); });
-      const box = new T.Box3().setFromObject(root), k = (box.max.y - box.min.y) / 1.85, cx = (box.min.x + box.max.x) / 2, base = box.min.y;
-      const J = {}; for (const key in JS) J[key] = new T.Vector3(JS[key][0] * k + cx, JS[key][1] * k + base, JS[key][2] * k);
-      const specs = [], add = (n, p, a, b) => specs.push({ n, p, a, b });
-      add("hips", null, J.hips, J.spine); add("spine", "hips", J.spine, J.chest); add("chest", "spine", J.chest, J.neck); add("neck", "chest", J.neck, J.head); add("head", "neck", J.head, J.headTop);
-      [["L", 1], ["R", -1]].forEach(([S, sg]) => {
-        const v = q => new T.Vector3((J[q].x - cx) * sg + cx, J[q].y, J[q].z);
-        add("uArm" + S, "chest", v("sh"), v("el")); add("lArm" + S, "uArm" + S, v("el"), v("wr")); add("hand" + S, "lArm" + S, v("wr"), v("hand"));
-        add("uLeg" + S, "hips", v("hp"), v("kn")); add("lLeg" + S, "uLeg" + S, v("kn"), v("an")); add("foot" + S, "lLeg" + S, v("an"), v("toe"));
-      });
-      const byN = {}, bones = specs.map(sp => { const b = new T.Bone(); b.name = sp.n; return b; });
-      specs.forEach((sp, i) => {
-        byN[sp.n] = sp; sp.bone = bones[i]; const par = sp.p ? byN[sp.p] : null;
-        bones[i].position.copy(sp.a).sub(par ? par.a : new T.Vector3()); if (par) par.bone.add(bones[i]);
-        sp.rest = sp.b.clone().sub(sp.a).normalize();
-      });
-      const rig = new T.Group(); rig.add(bones[0]); rig.updateMatrixWorld(true);
-      const skeleton = new T.Skeleton(bones), shX = J.sh.x - cx;
-      meshes.forEach(mesh => {
-        const geom = mesh.geometry.clone(); geom.applyMatrix4(mesh.matrixWorld);
-        const pos = geom.attributes.position, n = pos.count, si = new Uint16Array(n * 4), sw = new Float32Array(n * 4), hair = /hair/i.test(mesh.name + " " + (mesh.material && mesh.material.name || ""));
-        for (let v = 0; v < n; v++) {
-          const px = pos.getX(v), py = pos.getY(v), pz = pos.getZ(v), cand = [];
-          specs.forEach((sp, bi) => {
-            const nm = sp.n; if (hair && !/^(spine|chest|neck|head)$/.test(nm)) return;
-            const ax = sp.a.x, ay = sp.a.y, az = sp.a.z, bx = sp.b.x - ax, by = sp.b.y - ay, bz = sp.b.z - az;
-            let u = ((px - ax) * bx + (py - ay) * by + (pz - az) * bz) / (bx * bx + by * by + bz * bz); u = u < 0 ? 0 : u > 1 ? 1 : u;
-            let d = Math.hypot(px - ax - bx * u, py - ay - by * u, pz - az - bz * u);
-            const side = /L$/.test(nm) ? 1 : /R$/.test(nm) ? -1 : 0;
-            if (side) { const rx = (px - cx) * side; if (rx < 0) d += 1; else if (/Arm|hand/.test(nm)) d += Math.max(0, shX + 0.02 * k - rx) * 4; }
-            cand.push([d, bi]);
+
+      // Check if model has a pre-existing skeleton / skinned meshes (e.g. avatar2.glb / Freyja)
+      const existingBones = [];
+      root.traverse(o => { if (o.isBone) existingBones.push(o); });
+
+      if (existingBones.length > 0) {
+        // --- Skinned Mesh Rig (avatar2.glb / Freyja 118-bone rig) ---
+        const box = new T.Box3().setFromObject(root);
+        const cx = (box.min.x + box.max.x) / 2;
+        const cy = box.min.y;
+        const cz = (box.min.z + box.max.z) / 2;
+        const modelHeight = Math.max(0.1, box.max.y - box.min.y);
+
+        // Normalize root pivot: center horizontally (X=0, Z=0) and ground feet to y=0
+        root.position.set(-cx, -cy, -cz);
+
+        const rig = new T.Group();
+        rig.add(root);
+        rig.updateMatrixWorld(true);
+
+        const findBone = (rgx) => {
+          let found = null;
+          root.traverse(o => {
+            if (!found && o.isBone && rgx.test(o.name)) found = o;
           });
-          cand.sort((a, b) => a[0] - b[0]); let tot = 0; const ws = [];
-          for (let q = 0; q < 4; q++) { const w = 1 / Math.pow(cand[q][0] + 0.015, 3); ws.push(w); tot += w; }
-          for (let q = 0; q < 4; q++) { si[v * 4 + q] = cand[q][1]; sw[v * 4 + q] = ws[q] / tot; }
-        }
-        geom.setAttribute("skinIndex", new T.Uint16BufferAttribute(si, 4)); geom.setAttribute("skinWeight", new T.Float32BufferAttribute(sw, 4));
-        const m = mesh.material; if (m) { m.side = T.DoubleSide; if (m.metalness > 0.3) m.metalness = 0.3; if (hair) { m.transparent = true; m.alphaTest = 0.35; } }
-        const sm = new T.SkinnedMesh(geom, m); sm.frustumCulled = false; rig.add(sm); sm.bind(skeleton, new T.Matrix4());
-      });
-      const shRest = new T.Vector3(cx, J.sh.y, J.sh.z);
-      AV.scene.add(rig); Object.assign(AV, { rig, specs, byN, q: {}, hipRest: J.hips.clone(), shRest });
+          return found;
+        };
+
+        const bones = {
+          hips: findBone(/hips/i),
+          spine: findBone(/spine/i),
+          chest: findBone(/chest/i),
+          neck: findBone(/neck/i),
+          head: findBone(/head/i),
+          shoulderL: findBone(/shoulder.*l/i),
+          shoulderR: findBone(/shoulder.*r/i),
+          uArmL: findBone(/arm.*l/i),
+          uArmR: findBone(/arm.*r/i),
+          lArmL: findBone(/elbow.*l/i),
+          lArmR: findBone(/elbow.*r/i),
+          handL: findBone(/hand.*l(?!.*(?:thumb|index|middle|ring|pinky))/i),
+          handR: findBone(/hand.*r(?!.*(?:thumb|index|middle|ring|pinky))/i),
+          uLegL: findBone(/leg.*l/i),
+          uLegR: findBone(/leg.*r/i),
+          lLegL: findBone(/knee.*l/i),
+          lLegR: findBone(/knee.*r/i),
+          footL: findBone(/foot.*l/i),
+          footR: findBone(/foot.*r/i)
+        };
+
+        // Cache initial rest quaternions for stable relative transformations
+        Object.values(bones).forEach(b => {
+          if (b) b.userData.initQuat = b.quaternion.clone();
+        });
+
+        // Determine rest positions for screen anchoring
+        const hipWorld = new T.Vector3();
+        if (bones.hips) bones.hips.getWorldPosition(hipWorld);
+        const chestWorld = new T.Vector3();
+        if (bones.chest) bones.chest.getWorldPosition(chestWorld);
+
+        const hipRest = new T.Vector3(0, hipWorld.y > 0 ? hipWorld.y - cy : modelHeight * 0.52, 0);
+        const shRest = new T.Vector3(0, chestWorld.y > 0 ? chestWorld.y - cy : modelHeight * 0.74, 0);
+
+        AV.scene.add(rig);
+        Object.assign(AV, {
+          rig,
+          isSkinned: true,
+          bones,
+          specs: [],
+          byN: {},
+          q: {},
+          hipRest,
+          shRest,
+          modelHeight
+        });
+      } else {
+        // --- Static Unrigged Mesh (avatar.glb / Pandora procedural 16-bone auto-rigger) ---
+        AV.isSkinned = false;
+        const meshes = []; root.traverse(o => { if (o.isMesh) meshes.push(o); });
+        const box = new T.Box3().setFromObject(root), k = (box.max.y - box.min.y) / 1.85, cx = (box.min.x + box.max.x) / 2, base = box.min.y;
+        const J = {}; for (const key in JS) J[key] = new T.Vector3(JS[key][0] * k + cx, JS[key][1] * k + base, JS[key][2] * k);
+        const specs = [], add = (n, p, a, b) => specs.push({ n, p, a, b });
+        add("hips", null, J.hips, J.spine); add("spine", "hips", J.spine, J.chest); add("chest", "spine", J.chest, J.neck); add("neck", "chest", J.neck, J.head); add("head", "neck", J.head, J.headTop);
+        [["L", 1], ["R", -1]].forEach(([S, sg]) => {
+          const v = q => new T.Vector3((J[q].x - cx) * sg + cx, J[q].y, J[q].z);
+          add("uArm" + S, "chest", v("sh"), v("el")); add("lArm" + S, "uArm" + S, v("el"), v("wr")); add("hand" + S, "lArm" + S, v("wr"), v("hand"));
+          add("uLeg" + S, "hips", v("hp"), v("kn")); add("lLeg" + S, "uLeg" + S, v("kn"), v("an")); add("foot" + S, "lLeg" + S, v("an"), v("toe"));
+        });
+        const byN = {}, bones = specs.map(sp => { const b = new T.Bone(); b.name = sp.n; return b; });
+        specs.forEach((sp, i) => {
+          byN[sp.n] = sp; sp.bone = bones[i]; const par = sp.p ? byN[sp.p] : null;
+          bones[i].position.copy(sp.a).sub(par ? par.a : new T.Vector3()); if (par) par.bone.add(bones[i]);
+          sp.rest = sp.b.clone().sub(sp.a).normalize();
+        });
+        const rig = new T.Group(); rig.add(bones[0]); rig.updateMatrixWorld(true);
+        const skeleton = new T.Skeleton(bones), shX = J.sh.x - cx;
+        meshes.forEach(mesh => {
+          const geom = mesh.geometry.clone(); geom.applyMatrix4(mesh.matrixWorld);
+          const pos = geom.attributes.position, n = pos.count, si = new Uint16Array(n * 4), sw = new Float32Array(n * 4), hair = /hair/i.test(mesh.name + " " + (mesh.material && mesh.material.name || ""));
+          for (let v = 0; v < n; v++) {
+            const px = pos.getX(v), py = pos.getY(v), pz = pos.getZ(v), cand = [];
+            specs.forEach((sp, bi) => {
+              const nm = sp.n; if (hair && !/^(spine|chest|neck|head)$/.test(nm)) return;
+              const ax = sp.a.x, ay = sp.a.y, az = sp.a.z, bx = sp.b.x - ax, by = sp.b.y - ay, bz = sp.b.z - az;
+              let u = ((px - ax) * bx + (py - ay) * by + (pz - az) * bz) / (bx * bx + by * by + bz * bz); u = u < 0 ? 0 : u > 1 ? 1 : u;
+              let d = Math.hypot(px - ax - bx * u, py - ay - by * u, pz - az - bz * u);
+              const side = /L$/.test(nm) ? 1 : /R$/.test(nm) ? -1 : 0;
+              if (side) { const rx = (px - cx) * side; if (rx < 0) d += 1; else if (/Arm|hand/.test(nm)) d += Math.max(0, shX + 0.02 * k - rx) * 4; }
+              cand.push([d, bi]);
+            });
+            cand.sort((a, b) => a[0] - b[0]); let tot = 0; const ws = [];
+            for (let q = 0; q < 4; q++) { const w = 1 / Math.pow(cand[q][0] + 0.015, 3); ws.push(w); tot += w; }
+            for (let q = 0; q < 4; q++) { si[v * 4 + q] = cand[q][1]; sw[v * 4 + q] = ws[q] / tot; }
+          }
+          geom.setAttribute("skinIndex", new T.Uint16BufferAttribute(si, 4)); geom.setAttribute("skinWeight", new T.Float32BufferAttribute(sw, 4));
+          const m = mesh.material; if (m) { m.side = T.DoubleSide; if (m.metalness > 0.3) m.metalness = 0.3; if (hair) { m.transparent = true; m.alphaTest = 0.35; } }
+          const sm = new T.SkinnedMesh(geom, m); sm.frustumCulled = false; rig.add(sm); sm.bind(skeleton, new T.Matrix4());
+        });
+        const shRest = new T.Vector3(cx, J.sh.y, J.sh.z);
+        AV.scene.add(rig); Object.assign(AV, { rig, specs, byN, q: {}, hipRest: J.hips.clone(), shRest, modelHeight: 1.85 });
+      }
     }
     function avCalibrate() {
       let n = 3; const tick = () => {
@@ -1529,13 +2060,36 @@
       AV.renderer.render(AV.scene, AV.cam);
     }
     function avatarDrive(P, Wd, W, H) {
-      const T = AV.T, mir = state.mirrorView, xs = Math.sign((P[11].x - P[12].x) * (Wd[11].x - Wd[12].x)) || 1, mx = (mir ? -1 : 1) * xs;
-      const S = i => new T.Vector3(mx * Wd[i].x, -Wd[i].y, -Wd[i].z), vis = i => P[i].visibility == null ? 1 : P[i].visibility;
+      const T = AV.T, mir = state.mirrorView;
+
+      // Temporal Exponential Moving Average (EMA) Landmark Smoothing (Kalidokit / VRM filter standard)
+      if (!AV.smoothP || AV.smoothP.length !== P.length) {
+        AV.smoothP = P.map(p => ({ x: p.x, y: p.y, z: p.z, visibility: p.visibility }));
+        AV.smoothWd = Wd.map(p => ({ x: p.x, y: p.y, z: p.z }));
+      } else {
+        const pAlpha = 0.28; // Smooth low-pass factor eliminating camera sensor jitter
+        for (let i = 0; i < P.length; i++) {
+          AV.smoothP[i].x += (P[i].x - AV.smoothP[i].x) * pAlpha;
+          AV.smoothP[i].y += (P[i].y - AV.smoothP[i].y) * pAlpha;
+          AV.smoothP[i].z += (P[i].z - AV.smoothP[i].z) * pAlpha;
+          AV.smoothP[i].visibility = P[i].visibility;
+          AV.smoothWd[i].x += (Wd[i].x - AV.smoothWd[i].x) * pAlpha;
+          AV.smoothWd[i].y += (Wd[i].y - AV.smoothWd[i].y) * pAlpha;
+          AV.smoothWd[i].z += (Wd[i].z - AV.smoothWd[i].z) * pAlpha;
+        }
+      }
+      const sP = AV.smoothP, sWd = AV.smoothWd;
+      const xs = Math.sign((sP[11].x - sP[12].x) * (sWd[11].x - sWd[12].x)) || 1, mx = (mir ? -1 : 1) * xs;
+      const S = i => new T.Vector3(mx * sWd[i].x, -sWd[i].y, -sWd[i].z), vis = i => sP[i].visibility == null ? 1 : sP[i].visibility;
       const ix = (b, side) => b + ((side === "L") === !mir ? 0 : 1), mid = (a, b) => a.clone().add(b).multiplyScalar(0.5);
       const basis = (r, u) => { r = r.clone().normalize(); const f = new T.Vector3().crossVectors(r, u).normalize(), u2 = new T.Vector3().crossVectors(f, r); return new T.Quaternion().setFromRotationMatrix(new T.Matrix4().makeBasis(r, u2, f)); };
 
-      // Adaptive detection: are hips visible or is the user seated / head-only framing?
-      const hipsVis = vis(23) > 0.45 && vis(24) > 0.45 && P[23].y < 0.90 && P[24].y < 0.90;
+      // Hysteresis on hips visibility to eliminate sudden frame-to-frame seated/standing anchor jumping
+      const rawHipsVis = vis(23) > 0.45 && vis(24) > 0.45 && sP[23].y < 0.90 && sP[24].y < 0.90;
+      if (AV.hipsVis == null) AV.hipsVis = rawHipsVis;
+      else if (AV.hipsVis && (!rawHipsVis && (vis(23) < 0.35 || vis(24) < 0.35))) AV.hipsVis = false;
+      else if (!AV.hipsVis && (rawHipsVis && (vis(23) > 0.55 && vis(24) > 0.55))) AV.hipsVis = true;
+      const hipsVis = AV.hipsVis;
 
       const hipL = S(ix(23, "L")), hipR = S(ix(23, "R")), shL = S(ix(11, "L")), shR = S(ix(11, "R"));
       const up = hipsVis ? mid(shL, shR).sub(mid(hipL, hipR)) : new T.Vector3(0, 1, 0);
@@ -1551,7 +2105,25 @@
       const rel = k => AV.cal ? raw[k].clone().multiply(AV.cal[k].clone().invert()) : raw[k].clone(), tgt = {};
       tgt.hips = rel("hips"); tgt.chest = rel("chest"); tgt.head = rel("head");
       tgt.spine = tgt.hips.clone().slerp(tgt.chest, 0.5); tgt.neck = tgt.chest.clone().slerp(tgt.head, 0.5);
-      const swing = (name, a, b, v) => { const d = b.clone().sub(a); tgt[name] = (v < 0.4 || d.lengthSq() < 1e-6) ? new T.Quaternion() : new T.Quaternion().setFromUnitVectors(AV.byN[name].rest, d.normalize()); };
+      const defaultRests = {
+        uArmL: new T.Vector3(0.5, -0.86, 0).normalize(),
+        uArmR: new T.Vector3(-0.5, -0.86, 0).normalize(),
+        lArmL: new T.Vector3(0, -1, 0),
+        lArmR: new T.Vector3(0, -1, 0),
+        handL: new T.Vector3(0, -1, 0),
+        handR: new T.Vector3(0, -1, 0),
+        uLegL: new T.Vector3(0, -1, 0),
+        uLegR: new T.Vector3(0, -1, 0),
+        lLegL: new T.Vector3(0, -1, 0),
+        lLegR: new T.Vector3(0, -1, 0),
+        footL: new T.Vector3(0, 0, 1),
+        footR: new T.Vector3(0, 0, 1)
+      };
+      const swing = (name, a, b, v) => {
+        const d = b.clone().sub(a);
+        const rest = (AV.byN && AV.byN[name] && AV.byN[name].rest) || defaultRests[name] || new T.Vector3(0, -1, 0);
+        tgt[name] = (v < 0.4 || d.lengthSq() < 1e-6) ? new T.Quaternion() : new T.Quaternion().setFromUnitVectors(rest, d.normalize());
+      };
       ["L", "R"].forEach(sd => {
         const a = q => ix(q, sd), mv = (...q) => Math.min(...q.map(vis));
         swing("uArm" + sd, S(a(11)), S(a(13)), mv(a(11), a(13))); swing("lArm" + sd, S(a(13)), S(a(15)), mv(a(13), a(15)));
@@ -1559,19 +2131,48 @@
         if (hipsVis) {
           swing("uLeg" + sd, S(a(23)), S(a(25)), mv(a(23), a(25))); swing("lLeg" + sd, S(a(25)), S(a(27)), mv(a(25), a(27))); swing("foot" + sd, S(a(27)), S(a(31)), mv(a(27), a(31)));
         } else {
-          // Standing neutral legs when seated/head-only
           tgt["uLeg" + sd] = new T.Quaternion();
           tgt["lLeg" + sd] = new T.Quaternion();
           tgt["foot" + sd] = new T.Quaternion();
         }
       });
-      AV.specs.forEach(sp => {
-        const q = AV.q[sp.n] || (AV.q[sp.n] = new T.Quaternion()); q.slerp(tgt[sp.n], /Leg|foot/.test(sp.n) ? 0.25 : 0.45);
-        sp.bone.quaternion.copy(sp.p ? AV.q[sp.p].clone().invert().multiply(q) : q);
-      });
-      // place + scale the rig so its hips/shoulders sit exactly on the user's (screen-space fit)
-      const avg = (i, j) => ({ x: (P[i].x + P[j].x) / 2, y: (P[i].y + P[j].y) / 2, z: 0 });
-      const sh = landmarkToScreen(avg(11, 12)), a = landmarkToScreen(P[11]), b = landmarkToScreen(P[12]);
+      if (AV.isSkinned && AV.bones) {
+        const applyRot = (bone, targetQ, lerpRate = 0.22) => {
+          if (!bone || !targetQ) return;
+          const key = bone.name;
+          const q = AV.q[key] || (AV.q[key] = new T.Quaternion());
+          q.slerp(targetQ, lerpRate);
+          bone.quaternion.copy(bone.userData.initQuat).multiply(q);
+        };
+        applyRot(AV.bones.hips, tgt.hips, 0.20);
+        applyRot(AV.bones.spine, tgt.spine, 0.20);
+        applyRot(AV.bones.chest, tgt.chest, 0.22);
+        applyRot(AV.bones.neck, tgt.neck, 0.22);
+        applyRot(AV.bones.head, tgt.head, 0.25);
+
+        ["L", "R"].forEach(sd => {
+          applyRot(AV.bones["uArm" + sd], tgt["uArm" + sd], 0.24);
+          applyRot(AV.bones["lArm" + sd], tgt["lArm" + sd], 0.24);
+          applyRot(AV.bones["hand" + sd], tgt["hand" + sd], 0.25);
+          if (hipsVis) {
+            applyRot(AV.bones["uLeg" + sd], tgt["uLeg" + sd], 0.18);
+            applyRot(AV.bones["lLeg" + sd], tgt["lLeg" + sd], 0.18);
+            applyRot(AV.bones["foot" + sd], tgt["foot" + sd], 0.18);
+          } else if (AV.bones["uLeg" + sd]) {
+            AV.bones["uLeg" + sd].quaternion.copy(AV.bones["uLeg" + sd].userData.initQuat);
+            if (AV.bones["lLeg" + sd]) AV.bones["lLeg" + sd].quaternion.copy(AV.bones["lLeg" + sd].userData.initQuat);
+            if (AV.bones["foot" + sd]) AV.bones["foot" + sd].quaternion.copy(AV.bones["foot" + sd].userData.initQuat);
+          }
+        });
+      } else {
+        AV.specs.forEach(sp => {
+          const q = AV.q[sp.n] || (AV.q[sp.n] = new T.Quaternion()); q.slerp(tgt[sp.n], /Leg|foot/.test(sp.n) ? 0.18 : 0.25);
+          sp.bone.quaternion.copy(sp.p ? AV.q[sp.p].clone().invert().multiply(q) : q);
+        });
+      }
+      // Damped screen-space positioning & scale
+      const avg = (i, j) => ({ x: (sP[i].x + sP[j].x) / 2, y: (sP[i].y + sP[j].y) / 2, z: 0 });
+      const sh = landmarkToScreen(avg(11, 12)), a = landmarkToScreen(sP[11]), b = landmarkToScreen(sP[12]);
       const shoulderDist = Math.hypot(a.x - b.x, a.y - b.y);
 
       let targetScale;
@@ -1581,28 +2182,39 @@
       } else {
         targetScale = shoulderDist > 10 ? (shoulderDist / 0.34) : (H * 0.65);
       }
-      if (isFinite(targetScale) && targetScale > 20) AV.s += (Math.min(targetScale, H * 1.5) - AV.s) * 0.2;
-      AV.rig.scale.setScalar(AV.s);
+      if (isFinite(targetScale) && targetScale > 20) {
+        AV.s += (Math.min(targetScale, H * 1.5) - AV.s) * 0.12;
+        AV.rig.scale.setScalar(AV.s);
+      }
 
+      if (!AV.pos) AV.pos = new T.Vector3();
+      let targetX, targetY;
       if (hipsVis) {
         const hp = landmarkToScreen(avg(23, 24));
         const hipOffX = AV.hipRest.x * AV.s;
         const hipOffY = AV.hipRest.y * AV.s;
-        AV.rig.position.set(
-          (hp.x - W / 2) - hipOffX,
-          (H / 2 - hp.y) - hipOffY,
-          0
-        );
+        targetX = (hp.x - W / 2) - hipOffX;
+        targetY = (H / 2 - hp.y) - hipOffY;
       } else {
-        // Seated / head-only framing: anchor rig on shoulders
         const shOffX = (AV.shRest ? AV.shRest.x : 0) * AV.s;
         const shOffY = (AV.shRest ? AV.shRest.y : (AV.hipRest.y + 0.44)) * AV.s;
-        AV.rig.position.set(
-          (sh.x - W / 2) - shOffX,
-          (H / 2 - sh.y) - shOffY,
-          0
-        );
+        targetX = (sh.x - W / 2) - shOffX;
+        targetY = (H / 2 - sh.y) - shOffY;
       }
+      AV.pos.x += (targetX - AV.pos.x) * 0.14;
+      AV.pos.y += (targetY - AV.pos.y) * 0.14;
+      AV.rig.position.set(AV.pos.x, AV.pos.y, 0);
+    }
+    const switchBtn = document.getElementById("av-switch");
+    if (switchBtn) {
+      switchBtn.addEventListener("click", () => {
+        const isFreyja = (AV.currentModel || "./assets/avatar2.glb").includes("avatar2");
+        const nextModel = isFreyja ? "./assets/avatar.glb" : "./assets/avatar2.glb";
+        AV.currentModel = nextModel;
+        switchBtn.textContent = isFreyja ? "Model: Pandora" : "Model: Freyja";
+        switchBtn.classList.toggle("active", !isFreyja);
+        avatarStart(nextModel);
+      });
     }
     document.getElementById("av-cal").addEventListener("click", avCalibrate);
     document.getElementById("av-reset").addEventListener("click", () => { AV.cal = null; });
@@ -1720,6 +2332,7 @@
     // Scene Switching
     document.querySelectorAll(".scene-btn").forEach(btn => {
       btn.addEventListener("click", () => {
+        glCanvas.style.opacity = "1";
         document.querySelectorAll(".scene-btn").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
         state.scene = btn.dataset.scene;
@@ -1733,6 +2346,13 @@
         glCanvas.style.display = state.scene === "AVATAR" ? "none" : "block";
         avCanvas.style.display = state.scene === "AVATAR" ? "block" : "none";
         if (state.scene === "AVATAR" && !AV.ready) avatarStart();
+        if (state.scene !== "AVATAR") {
+          const avSkel = document.getElementById("av-skel");
+          if (avSkel && avSkel.classList.contains("active")) {
+            avSkel.classList.remove("active");
+            state.showPose = false;
+          }
+        }
 
         if (state.scene === "GAME") {
           state.gameScore = 0;
@@ -1744,9 +2364,58 @@
       });
     });
 
+    // Desktop mouse wheel horizontal scrolling and smooth click-and-drag panning on small screen PC
+    function enableMouseScroll(el) {
+      if (!el) return;
+      el.addEventListener("wheel", e => {
+        if (e.deltaY !== 0) {
+          e.preventDefault();
+          el.scrollLeft += e.deltaY * 0.85;
+        }
+      }, { passive: false });
+
+      let isDown = false;
+      let startX = 0;
+      let scrollLeft = 0;
+      let hasDragged = false;
+
+      el.addEventListener("mousedown", e => {
+        if (e.button !== 0) return;
+        isDown = true;
+        hasDragged = false;
+        startX = e.pageX - el.offsetLeft;
+        scrollLeft = el.scrollLeft;
+      });
+
+      window.addEventListener("mouseup", () => {
+        isDown = false;
+      });
+
+      el.addEventListener("mousemove", e => {
+        if (!isDown) return;
+        const x = e.pageX - el.offsetLeft;
+        const walk = (x - startX) * 1.4;
+        if (Math.abs(walk) > 5) hasDragged = true;
+        el.scrollLeft = scrollLeft - walk;
+      });
+
+      el.addEventListener("click", e => {
+        if (hasDragged) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          hasDragged = false;
+        }
+      }, true);
+    }
+
+    document.querySelectorAll(".dock-container, .scene-pill").forEach(enableMouseScroll);
+
     // Prism Shaders (Curated TouchDesigner-grade pipeline with true Spectral Prism first)
     const FILTERS = [
       "SPECTRAL_PRISM",
+      "HOLO_FABRIC",
+      "LIQUID_BUBBLE",
+      "PRISM_PLEXUS",
       "PRISM_CRISSCROSS",
       "KALEIDOSCOPE",
       "ZOOM_LENS",
@@ -1774,8 +2443,21 @@
       tab.addEventListener("click", () => setFilterMode(tab.dataset.filter));
     });
 
+    // Mystic Live Feed / Galaxy Background Toggle
+    const btnMysticFeed = document.getElementById("btn-mystic-feed");
+    if (btnMysticFeed) {
+      btnMysticFeed.addEventListener("click", () => {
+        state.mysticGalaxy = !state.mysticGalaxy;
+        btnMysticFeed.textContent = state.mysticGalaxy ? "Feed: Galaxy" : "Feed: Camera";
+        btnMysticFeed.classList.toggle("active", state.mysticGalaxy);
+        const hideCamFeed = (state.scene === "MYSTIC" && state.mysticGalaxy) || (state.scene === "GAME" && state.gameGalaxy);
+        glCanvas.style.opacity = hideCamFeed ? "0" : "1";
+      });
+    }
+
     // Mystic Spells
     document.querySelectorAll("#mystic-dock .filter-tab").forEach(tab => {
+        if (tab.id === "btn-mystic-feed") return;
       tab.addEventListener("click", () => {
         if (tab.dataset.spell === "TEXT" && state.spell === "TEXT") {
           const v = prompt("Title | Subtitle | Caption   (separate lines with |)", txt.lines.join(" | "));
@@ -2019,42 +2701,82 @@
               });
 
               if (!isAvatarScene) {
+                // Smooth, full-screen horizontal boundary extrapolation (effortlessly reaches 0.0 and 1.0)
+                const snapEdgeX = (normX, isLeft) => {
+                  if (isLeft) {
+                    if (normX <= 0.24) {
+                      const u = Math.max(0.0, (normX - 0.05) / (0.24 - 0.05));
+                      return u * 0.24;
+                    }
+                  } else {
+                    if (normX >= 0.76) {
+                      const u = Math.min(1.0, (normX - 0.76) / (0.95 - 0.76));
+                      return 0.76 + u * 0.24;
+                    }
+                  }
+                  return normX;
+                };
+
                 if (state.handData.length >= 2) {
                   const sorted = [...state.handData].sort((a, b) => a.sMid.normX - b.sMid.normX);
                   leftHand = sorted[0]; rightHand = sorted[sorted.length - 1];
+                  state.lastLeftHand = { sIndex: { ...leftHand.sIndex }, sThumb: { ...leftHand.sThumb }, isPinching: leftHand.isPinching };
+                  state.lastRightHand = { sIndex: { ...rightHand.sIndex }, sThumb: { ...rightHand.sThumb }, isPinching: rightHand.isPinching };
+                } else if (state.handData.length === 1 && state.prismActive && (state.lastLeftHand || state.lastRightHand)) {
+                  // Single hand visible: anchor out-of-frame hand to absolute screen edge (0.0 or 1.0)
+                  const single = state.handData[0];
+                  if (single.sMid.normX < 0.5) {
+                    leftHand = single;
+                    rightHand = {
+                      sIndex: { normX: 1.0, normY: single.sIndex.normY },
+                      sThumb: { normX: 1.0, normY: single.sThumb.normY },
+                      isPinching: true
+                    };
+                  } else {
+                    rightHand = single;
+                    leftHand = {
+                      sIndex: { normX: 0.0, normY: single.sIndex.normY },
+                      sThumb: { normX: 0.0, normY: single.sThumb.normY },
+                      isPinching: true
+                    };
+                  }
                 }
 
                 const dualPinch = leftHand && rightHand && leftHand.isPinching && rightHand.isPinching;
                 if (dualPinch) state.prismActive = true;
 
                 if ((state.prismActive || state.prismLocked) && leftHand && rightHand) {
-                  state.targetCorners.tl.x = leftHand.sIndex.normX;
+                  state.targetCorners.tl.x = snapEdgeX(leftHand.sIndex.normX, true);
                   state.targetCorners.tl.y = leftHand.sIndex.normY;
-                  state.targetCorners.bl.x = leftHand.sThumb.normX;
+                  state.targetCorners.bl.x = snapEdgeX(leftHand.sThumb.normX, true);
                   state.targetCorners.bl.y = leftHand.sThumb.normY;
-                  state.targetCorners.tr.x = rightHand.sIndex.normX;
+                  state.targetCorners.tr.x = snapEdgeX(rightHand.sIndex.normX, false);
                   state.targetCorners.tr.y = rightHand.sIndex.normY;
-                  state.targetCorners.br.x = rightHand.sThumb.normX;
+                  state.targetCorners.br.x = snapEdgeX(rightHand.sThumb.normX, false);
                   state.targetCorners.br.y = rightHand.sThumb.normY;
                 }
 
-                // PINCH SHUTTER
-                if (state.scene === "PRISM" && state.prismActive && leftHand && rightHand) {
+                // PINCH SHUTTER (Defaults OFF to prevent accidental captures during normal prism interaction)
+                if (state.gestureShutterEnabled && state.scene === "PRISM" && state.prismActive && leftHand && rightHand) {
                   const pts = [state.targetCorners.tl, state.targetCorners.tr, state.targetCorners.br, state.targetCorners.bl];
                   let ar = 0;
                   for (let i = 0; i < 4; i++) { const a = pts[i], b = pts[(i + 1) % 4]; ar += a.x * b.y - b.x * a.y; }
                   if (Math.abs(ar) * 0.5 > 0.05) state.shutterArmed = true;
                   if (state.shutterArmed && dualPinch) {
                     if (!state.pinchSince) state.pinchSince = timeMs;
-                    if (timeMs - state.pinchSince > 150 && timeMs - state.lastShot > 2500) {
+                    // Require a steady, deliberate 2.0-second pinch hold so tapping or moving fingers never fires
+                    if (timeMs - state.pinchSince > 2000 && timeMs - state.lastShot > 3000) {
                       state.capture = "gesture"; state.lastShot = timeMs; state.shutterArmed = false; state.pinchSince = 0;
                     }
                   } else state.pinchSince = 0;
+                } else {
+                  state.pinchSince = 0;
+                  state.shutterArmed = false;
                 }
               }
 
-            } else if (!state.prismLocked && timeMs - state.lastHandsTime > 450) {
-              state.prismActive = false; state.shutterArmed = false; state.pinchSince = 0;
+            } else if (!state.prismLocked && timeMs - state.lastHandsTime > 550) {
+              state.prismActive = false; state.shutterArmed = false; state.pinchSince = 0; state.lastLeftHand = null; state.lastRightHand = null;
             }
           }
 
@@ -2083,8 +2805,9 @@
           }
 
           // Pose Landmarks — run only in Avatar mode or when skeleton overlay is toggled on (eliminates background stutter)
-          const needPose = isAvatarScene || state.showPose;
-          if (poseLandmarker && needPose && frameStep % (isAvatarScene ? 2 : 4) === 0) {
+          const needPose = isAvatarScene || state.showPose || (state.scene === "MYSTIC" && state.spell === "PLEXUS");
+          const poseInterval = (isAvatarScene || (state.scene === "MYSTIC" && state.spell === "PLEXUS")) ? 2 : 4;
+          if (poseLandmarker && needPose && frameStep % poseInterval === 0) {
             const poseRes = poseLandmarker.detectForVideo(video, timeMs);
             state.poseLandmarks = (poseRes.landmarks && poseRes.landmarks.length > 0) ? poseRes.landmarks[0] : null;
             state.poseWorld = (poseRes.worldLandmarks && poseRes.worldLandmarks.length > 0) ? poseRes.worldLandmarks[0] : null;
@@ -2301,6 +3024,15 @@
       sb.style.display = "block"; sb.textContent = "PHOTO SAVED · SPACE / C";
       setTimeout(() => { sb.style.display = prevDisp; }, 1400);
     }
+    const toggleGestureShutter = document.getElementById("toggle-gesture-shutter");
+    if (toggleGestureShutter) {
+      toggleGestureShutter.addEventListener("click", () => {
+        state.gestureShutterEnabled = !state.gestureShutterEnabled;
+        toggleGestureShutter.textContent = state.gestureShutterEnabled ? "ON" : "OFF";
+        toggleGestureShutter.classList.toggle("active", state.gestureShutterEnabled);
+      });
+    }
+
     document.getElementById("btn-capture").addEventListener("click", () => { state.capture = "manual"; settingsDrawer.classList.remove("open"); });
     document.getElementById("btn-hud-capture").addEventListener("click", () => { state.capture = "manual"; });
 

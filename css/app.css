@@ -255,12 +255,33 @@
       gap: 4px;
       max-width: 100%;
       overflow-x: auto;
-      scrollbar-width: none;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
       align-items: center;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .dock-container:active {
+      cursor: grabbing;
     }
 
     .dock-container::-webkit-scrollbar {
-      display: none;
+      height: 3px;
+      display: block;
+    }
+
+    .dock-container::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .dock-container::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 3px;
+    }
+
+    .dock-container::-webkit-scrollbar-thumb:hover {
+      background: rgba(56, 189, 248, 0.5);
     }
 
     .filter-tab {

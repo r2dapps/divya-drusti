@@ -11,20 +11,20 @@
   <meta name="keywords" content="AR camera effects, augmented reality browser, WebGL shader, hair color AR, face makeup AR, gesture control, MediaPipe, PWA, Razel Tech, Divya Drusti, spatial vision studio, avatar motion capture, face effects online">
   <meta name="author" content="Razel Tech">
   <meta name="robots" content="index, follow">
-  <link rel="canonical" href="https://razeltech.github.io/DivyaDrusti/">
+  <link rel="canonical" href="https://r2dapps.github.io/divya-drusti/">
 
   <!-- Open Graph (Facebook, WhatsApp, LinkedIn, iMessage) -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Divya Drusti — Spatial Vision Studio">
   <meta property="og:title" content="Divya Drusti — Spatial Vision Studio | AR Camera Effects">
   <meta property="og:description" content="Real-time AR camera studio in your browser: 14 WebGL shader effects, AI hair & makeup try-on, gesture spells, 3D avatar motion capture, and an educational game. No install. No data leaves your device. Powered by Razel Tech.">
-  <meta property="og:image" content="https://razeltech.github.io/DivyaDrusti/assets/og-preview.jpg">
-  <meta property="og:image:secure_url" content="https://razeltech.github.io/DivyaDrusti/assets/og-preview.jpg">
+  <meta property="og:image" content="https://r2dapps.github.io/divya-drusti/assets/og-preview.jpg">
+  <meta property="og:image:secure_url" content="https://r2dapps.github.io/divya-drusti/assets/og-preview.jpg">
   <meta property="og:image:type" content="image/jpeg">
   <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="675">
+  <meta property="og:image:height" content="669">
   <meta property="og:image:alt" content="Divya Drusti Spatial Vision Studio — AR camera studio preview showing a glowing prism with colorful shader effects, powered by Razel Tech">
-  <meta property="og:url" content="https://razeltech.github.io/DivyaDrusti/">
+  <meta property="og:url" content="https://r2dapps.github.io/divya-drusti/">
   <meta property="og:locale" content="en_IN">
 
   <!-- Twitter / X Card -->
@@ -33,7 +33,7 @@
   <meta name="twitter:creator" content="@razeltech">
   <meta name="twitter:title" content="Divya Drusti — Spatial Vision Studio | AR Camera Effects">
   <meta name="twitter:description" content="Real-time AR camera studio in your browser: 14 WebGL shaders, AI hair & makeup, gesture spells, 3D avatar motion capture. No install. Powered by Razel Tech.">
-  <meta name="twitter:image" content="https://razeltech.github.io/DivyaDrusti/assets/og-preview.jpg">
+  <meta name="twitter:image" content="https://r2dapps.github.io/divya-drusti/assets/og-preview.jpg">
   <meta name="twitter:image:alt" content="Divya Drusti Spatial Vision Studio preview by Razel Tech">
 
   <!-- WhatsApp & Telegram specific (uses og: tags; image must be exactly reachable over HTTPS) -->
@@ -58,8 +58,8 @@
     "@type": "WebApplication",
     "name": "Divya Drusti — Spatial Vision Studio",
     "description": "Real-time AR camera studio in your browser with WebGL shaders, AI hair and makeup try-on, gesture-controlled spells, 3D avatar motion capture and an educational game. No install required.",
-    "url": "https://razeltech.github.io/DivyaDrusti/",
-    "image": "https://razeltech.github.io/DivyaDrusti/assets/og-preview.jpg",
+    "url": "https://r2dapps.github.io/divya-drusti/",
+    "image": "https://r2dapps.github.io/divya-drusti/assets/og-preview.jpg",
     "applicationCategory": "MultimediaApplication",
     "operatingSystem": "Web",
     "browserRequirements": "Requires WebGL2 and a webcam. Best in Chrome, Edge, or Safari 16+.",
@@ -69,15 +69,39 @@
   }
   </script>
   <script>
-    // Suppress benign TensorFlow Lite / XNNPACK Emscripten stderr info logs
+    // Suppress benign internal MediaPipe / TensorFlow Lite / XNNPACK C++ WebAssembly diagnostics
     (function() {
+      const isBenign = function(txt) {
+        return (
+          txt.includes('INFO:') ||
+          txt.includes('XNNPACK') ||
+          txt.includes('TensorFlow Lite') ||
+          txt.includes('gesture_recognizer_graph') ||
+          txt.includes('hand_gesture_recognizer_graph') ||
+          txt.includes('face_landmarker_graph') ||
+          txt.includes('inference_feedback_manager') ||
+          txt.includes('gl_context.cc') ||
+          txt.includes('CPU only ops') ||
+          txt.includes('acceleration to Xnnpack') ||
+          txt.includes('Custom gesture classifier is not defined') ||
+          txt.includes('OpenGL error checking is disabled') ||
+          txt.includes('Sets FaceBlendshapesGraph acceleration') ||
+          txt.includes('Disabling support for feedback tensors') ||
+          txt.includes('Graph successfully started running')
+        );
+      };
+
+      const _origWarn = console.warn;
+      console.warn = function(...args) {
+        const txt = args.map(a => (typeof a === 'string' ? a : (a && a.message) || '')).join(' ');
+        if (isBenign(txt)) return;
+        _origWarn.apply(console, args);
+      };
+
       const _origErr = console.error;
       console.error = function(...args) {
         const txt = args.map(a => (typeof a === 'string' ? a : (a && a.message) || '')).join(' ');
-        if (txt.includes('INFO:') || txt.includes('XNNPACK') || txt.includes('TensorFlow Lite')) {
-          console.info(...args);
-          return;
-        }
+        if (isBenign(txt)) return;
         _origErr.apply(console, args);
       };
     })();
@@ -146,6 +170,9 @@
         <!-- Scene 1: Spatial Prism Shader Dock -->
         <div id="prism-dock" class="dock-container interactive">
           <button class="filter-tab active" data-filter="SPECTRAL_PRISM">Spectral Prism</button>
+          <button class="filter-tab" data-filter="HOLO_FABRIC">Bendy Fabric</button>
+          <button class="filter-tab" data-filter="LIQUID_BUBBLE">Liquid Bubble</button>
+          <button class="filter-tab" data-filter="PRISM_PLEXUS">Proximity POP</button>
           <button class="filter-tab" data-filter="PRISM_CRISSCROSS">Prism Crisscross</button>
           <button class="filter-tab" data-filter="KALEIDOSCOPE">Kaleidoscope</button>
           <button class="filter-tab" data-filter="ZOOM_LENS">Zoom Lens</button>
@@ -186,6 +213,7 @@
 
         <!-- Scene 3: Mystic Jutsu Modes Dock -->
         <div id="mystic-dock" class="dock-container interactive" style="display: none;">
+          <button class="filter-tab" id="btn-mystic-feed">Feed: Camera</button>
           <button class="filter-tab active" data-spell="SHIELD">Eldritch Shield</button>
           <button class="filter-tab" data-spell="CHIDORI">Chidori Lightning</button>
           <button class="filter-tab" data-spell="RASENGAN">Rasengan Vortex</button>
@@ -195,11 +223,13 @@
           <button class="filter-tab" data-spell="CLOUD">3D Point Cloud</button>
           <button class="filter-tab" data-spell="TEXT">Finger Text</button>
           <button class="filter-tab" data-spell="FEEDBACK">Light Painter</button>
-          <button class="filter-tab" data-spell="FLOCK">Flow Swarm</button>
+          <button class="filter-tab" data-spell="FLOCK">Fish Flock Swarm</button>
+          <button class="filter-tab" data-spell="PLEXUS">Proximity POP</button>
         </div>
 
         <!-- Scene 5: Avatar Dock -->
         <div id="avatar-dock" class="dock-container interactive" style="display: none;">
+          <button class="filter-tab active" id="av-switch">Model: Freyja</button>
           <button class="filter-tab" id="av-cal">Calibrate (3s)</button>
           <button class="filter-tab" id="av-reset">Reset Cal</button>
           <button class="filter-tab" id="av-bg">Backdrop</button>
@@ -210,6 +240,7 @@
 
         <!-- Scene 4: Prana Catch Modes Dock (Educational STEM Curriculum) -->
         <div id="game-dock" class="dock-container interactive" style="display: none;">
+          <button class="filter-tab" id="btn-game-feed">Feed: Camera</button>
           <button class="filter-tab active" data-gmode="ARCADE">Arcade</button>
           <button class="filter-tab" data-gmode="MATH">Math</button>
           <button class="filter-tab" data-gmode="PHYSICS">Physics</button>
@@ -282,6 +313,30 @@
           </div>
           <input type="range" id="slider-skin" min="0" max="100" value="60">
         </div>
+
+        <div class="slider-row">
+          <div class="slider-info">
+            <span>Lipstick Tint Opacity</span>
+            <span id="val-lip-opacity">35%</span>
+          </div>
+          <input type="range" id="slider-lip-opacity" min="10" max="80" value="35">
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-info">
+            <span>Plexus Proximity Radius</span>
+            <span id="val-plexus-radius">65px</span>
+          </div>
+          <input type="range" id="slider-plexus-radius" min="35" max="130" value="65">
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-info">
+            <span>Swarm Velocity &amp; Drag</span>
+            <span id="val-flock-speed">100%</span>
+          </div>
+          <input type="range" id="slider-flock-speed" min="40" max="220" value="100">
+        </div>
       </div>
 
       <!-- Skeletons & Spatial Tracking (Defaults OFF) -->
@@ -312,6 +367,7 @@
       <div class="settings-group">
         <div class="section-label">Studio Tools</div>
         <div class="toggle-row"><span>Capture Photo</span><button id="btn-capture" class="switch-btn">SNAP</button></div>
+        <div class="toggle-row"><span>Gesture Shutter (Dual Pinch)</span><button id="toggle-gesture-shutter" class="switch-btn">OFF</button></div>
         <div class="toggle-row"><span>Fullscreen</span><button id="btn-fullscreen" class="switch-btn">GO</button></div>
         <div class="toggle-row" id="row-install" style="display:none"><span>Install App</span><button id="btn-install" class="switch-btn">INSTALL</button></div>
       </div>
@@ -398,7 +454,7 @@
           </div>
           <div class="step-item">
             <span class="step-num">5</span>
-            <span><strong>Pinch Shutter:</strong> Open the prism wide (outline turns green), then pinch index to thumb on both hands to save a clean camera photo with watermark.</span>
+            <span><strong>Instant Photo Capture:</strong> Tap the Capture button in the header bar or press Space / C anytime to save a pristine studio snapshot. Gesture shutter (hold pinch 2s) can be enabled in Settings.</span>
           </div>
         </div>
 
