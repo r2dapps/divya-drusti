@@ -19,6 +19,10 @@
       }
     });
 
+    let lastHandSwipeTime = 0;
+    let prevHandX = null;
+    let prevHandTime = 0;
+
     const state = {
       scene: "PRISM", // "PRISM" | "MAKEUP" | "MYSTIC" | "GAME"
       filter: "SPECTRAL_PRISM",
@@ -870,7 +874,19 @@
       if (state.scene === "MAKEUP") drawMakeup(w, h);
       if (state.scene === "MYSTIC") drawMystic(w, h);
       if (state.scene === "PRISM" && state.filter === "PRISM_PLEXUS" && state.prismOpacity > 0.01) {
+        vCtx.save();
+        const c2d = state.corners2D;
+        if (c2d) {
+          vCtx.beginPath();
+          vCtx.moveTo(c2d.tl.x, c2d.tl.y);
+          vCtx.lineTo(c2d.tr.x, c2d.tr.y);
+          vCtx.lineTo(c2d.br.x, c2d.br.y);
+          vCtx.lineTo(c2d.bl.x, c2d.bl.y);
+          vCtx.closePath();
+          vCtx.clip();
+        }
         drawProximityPOP(vCtx, w, h, performance.now() * 0.001);
+        vCtx.restore();
       }
       if (state.scene === "GAME") drawGame(w, h);
       if (state.scene === "MUSIC") drawMusic(w, h);
@@ -885,7 +901,9 @@
     let prevHair = null, prevSkin = null, prevPerson = null;
     Object.assign(state, { trails: {}, lives: 3, streak: 0, level: 1, over: false, flash: 0, rings: [], headTrail: [],
       maskDirty: false, capture: false, lastHandsTime: -1e9, prevActive: false, shutterArmed: false, lastSnapshotBlob: null, lastSnapshotUrl: null, pinchSince: 0, lastShot: -1e9, shotFlash: 0, zoom: 2.5, skinSmooth: 0.6, best: 0, gmode: "ARCADE", fbGood: true,
-      lipOpacity: 0.35, plexusRadius: 65, flockCount: 1200, instrument: "PIANO", octaveOffset: 0, flockSpeed: 1.0, gameGalaxy: false });
+      lipOpacity: 0.35,
+      blushColor: "none",
+      blushOpacity: 0.65, plexusRadius: 65, flockCount: 1200, instrument: "PIANO", octaveOffset: 0, pianoLevel: "FLOATING", flockSpeed: 1.0, gameGalaxy: false });
     try { state.best = +localStorage.getItem("divya_best") || 0; } catch (e) {}
     const badge = t => { const b = document.getElementById("status-badge"); if (b.textContent !== t) b.textContent = t; };
     function glow(c, x, y, r, a, b) {
@@ -941,10 +959,23 @@
         const g = P(17), mw = Math.hypot(P(61).x - P(291).x, P(61).y - P(291).y);
         c.save(); c.globalAlpha = 0.35; glow(c, g.x, g.y - mw * 0.03, mw * 0.2, "rgba(255,255,255,0.6)", "rgba(255,255,255,0)"); c.restore();
       }
-      [205, 425].forEach(i => {
-        const p = P(i); c.save(); c.globalAlpha = 0.5;
-        glow(c, p.x, p.y, fw * 0.16, "rgba(244,63,94,0.55)", "rgba(244,63,94,0)"); c.restore();
-      });
+      if (state.blushColor && state.blushColor !== "none") {
+        const hexToRgb = hex => {
+          let h = hex.replace("#", "");
+          if (h.length === 3) h = h.split("").map(x => x + x).join("");
+          const num = parseInt(h, 16);
+          return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+        };
+        const [br, bg, bb] = hexToRgb(state.blushColor);
+        const blushAlpha = (state.blushOpacity != null ? state.blushOpacity : 0.65) * 0.55;
+        [205, 425].forEach(i => {
+          const p = P(i);
+          c.save();
+          c.globalAlpha = 1.0;
+          glow(c, p.x, p.y, fw * 0.18, `rgba(${br},${bg},${bb},${blushAlpha})`, `rgba(${br},${bg},${bb},0)`);
+          c.restore();
+        });
+      }
       const f = P(9); c.save(); c.globalAlpha = 0.9; c.fillStyle = "#f59e0b";
       c.beginPath(); c.arc(f.x, f.y, fw * 0.022, 0, TAU); c.fill(); c.restore();
     }
@@ -1097,6 +1128,114 @@
       return n + (d(4, 17) > d(3, 17) * 1.1 ? 1 : 0);
     }
     const RUNES = ["☉", "☽", "☿", "♀", "♂", "♃", "♄", "♈", "♉", "♊", "♋", "♌"];
+
+    function drawAlchemicalSigil(c, idx, s) {
+      c.save();
+      c.strokeStyle = "#ffe9a8";
+      c.fillStyle = "#ffe9a8";
+      c.lineWidth = Math.max(1.2, s * 0.16);
+      c.lineCap = "round";
+      c.lineJoin = "round";
+
+      const s2 = s * 0.5;
+      const s4 = s * 0.25;
+
+      c.beginPath();
+      switch (idx % 12) {
+        case 0: // Sun: Outer ring + center dot
+          c.arc(0, 0, s2, 0, TAU);
+          c.stroke();
+          c.beginPath();
+          c.arc(0, 0, Math.max(1.5, s * 0.14), 0, TAU);
+          c.fill();
+          break;
+        case 1: // Moon: Crescent
+          c.arc(0, 0, s2, -Math.PI * 0.5, Math.PI * 0.5);
+          c.arc(s4 * 0.9, 0, s2 * 0.72, Math.PI * 0.5, -Math.PI * 0.5, true);
+          c.stroke();
+          break;
+        case 2: // Mercury: Circle + bottom cross + top crescent
+          c.arc(0, 0, s4 * 1.1, 0, TAU);
+          c.stroke();
+          c.beginPath();
+          c.moveTo(0, s4 * 1.1); c.lineTo(0, s2 * 1.15);
+          c.moveTo(-s4 * 0.7, s4 * 1.7); c.lineTo(s4 * 0.7, s4 * 1.7);
+          c.moveTo(-s4 * 1.1, -s4 * 1.8);
+          c.quadraticCurveTo(0, -s4 * 0.9, s4 * 1.1, -s4 * 1.8);
+          c.stroke();
+          break;
+        case 3: // Venus: Circle + bottom cross
+          c.arc(0, -s4 * 0.4, s4 * 1.2, 0, TAU);
+          c.stroke();
+          c.beginPath();
+          c.moveTo(0, s4 * 0.8); c.lineTo(0, s2 * 1.25);
+          c.moveTo(-s4 * 0.7, s4 * 1.6); c.lineTo(s4 * 0.7, s4 * 1.6);
+          c.stroke();
+          break;
+        case 4: // Mars: Circle + diagonal arrow up-right
+          c.arc(-s4 * 0.35, s4 * 0.35, s4 * 1.1, 0, TAU);
+          c.stroke();
+          c.beginPath();
+          c.moveTo(s4 * 0.4, -s4 * 0.4); c.lineTo(s2 * 1.15, -s2 * 1.15);
+          c.lineTo(s4 * 0.6, -s2 * 1.15);
+          c.moveTo(s2 * 1.15, -s2 * 1.15); c.lineTo(s2 * 1.15, -s4 * 0.6);
+          c.stroke();
+          break;
+        case 5: // Jupiter: Cross and curved 4
+          c.moveTo(-s4 * 1.2, -s4 * 0.6);
+          c.quadraticCurveTo(-s4 * 0.4, -s4 * 1.4, s4 * 0.3, -s4 * 0.6);
+          c.lineTo(s4 * 0.3, s2 * 1.1);
+          c.moveTo(-s4 * 1.1, s4 * 0.3); c.lineTo(s2 * 0.95, s4 * 0.3);
+          c.stroke();
+          break;
+        case 6: // Saturn: Top cross with sickle foot
+          c.moveTo(-s4 * 0.8, -s2 * 0.9); c.lineTo(-s4 * 0.8, s4 * 0.5);
+          c.moveTo(-s2 * 0.9, -s4 * 1.0); c.lineTo(s4 * 0.1, -s4 * 1.0);
+          c.quadraticCurveTo(s2 * 0.9, s4 * 0.8, -s4 * 0.4, s2 * 1.1);
+          c.stroke();
+          break;
+        case 7: // Fire: Equilateral Triangle pointing UP
+          c.moveTo(0, -s2 * 1.15);
+          c.lineTo(s2 * 1.05, s2 * 0.85);
+          c.lineTo(-s2 * 1.05, s2 * 0.85);
+          c.closePath();
+          c.stroke();
+          break;
+        case 8: // Water: Equilateral Triangle pointing DOWN
+          c.moveTo(0, s2 * 1.15);
+          c.lineTo(s2 * 1.05, -s2 * 0.85);
+          c.lineTo(-s2 * 1.05, -s2 * 0.85);
+          c.closePath();
+          c.stroke();
+          break;
+        case 9: // Air: Triangle UP with horizontal crossbar
+          c.moveTo(0, -s2 * 1.15);
+          c.lineTo(s2 * 1.05, s2 * 0.85);
+          c.lineTo(-s2 * 1.05, s2 * 0.85);
+          c.closePath();
+          c.moveTo(-s2 * 0.7, -s4 * 0.1);
+          c.lineTo(s2 * 0.7, -s4 * 0.1);
+          c.stroke();
+          break;
+        case 10: // Earth: Triangle DOWN with horizontal crossbar
+          c.moveTo(0, s2 * 1.15);
+          c.lineTo(s2 * 1.05, -s2 * 0.85);
+          c.lineTo(-s2 * 1.05, -s2 * 0.85);
+          c.closePath();
+          c.moveTo(-s2 * 0.7, s4 * 0.1);
+          c.lineTo(s2 * 0.7, s4 * 0.1);
+          c.stroke();
+          break;
+        case 11: // Ouroboros / Infinity Loop
+          c.arc(-s4 * 0.95, 0, s4 * 0.85, 0, TAU);
+          c.stroke();
+          c.beginPath();
+          c.arc(s4 * 0.95, 0, s4 * 0.85, 0, TAU);
+          c.stroke();
+          break;
+      }
+      c.restore();
+    }
     function drawAlchemy(c, t) {
       const H = state.handData.map(handInfo);
       badge(H.length > 1 ? "ALCHEMY · hands apart = bigger circle · close fists to transmute" : "ALCHEMY · pinch wide = bigger circle · two hands = bind a circle");
@@ -1113,8 +1252,14 @@
       c.save(); c.translate(p.x, p.y); c.rotate(ang + t * 0.25);
       c.shadowColor = "#ffb020"; c.shadowBlur = 12; c.strokeStyle = "rgba(255,196,80,0.95)";
       [1, 0.82, 0.5].forEach((k, i) => { c.lineWidth = i ? 1.3 : 2.4; c.beginPath(); c.arc(0, 0, r * k, 0, TAU); c.stroke(); });
-      c.font = `${Math.max(10, r * 0.13)}px serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#ffe9a8";
-      for (let i = 0; i < 12; i++) { c.save(); c.rotate(i * TAU / 12); c.translate(0, -r * 0.91); c.fillText(RUNES[i % RUNES.length], 0, 0); c.restore(); }
+      // Procedural vector alchemical sigils (crisp Canvas 2D paths, zero missing unicode/white dots)
+      for (let i = 0; i < 12; i++) {
+        c.save();
+        c.rotate(i * TAU / 12);
+        c.translate(0, -r * 0.91);
+        drawAlchemicalSigil(c, i, Math.max(10, r * 0.11));
+        c.restore();
+      }
       c.strokeStyle = "#ffe9a8"; c.lineWidth = 1.6;
       c.save(); c.rotate(-t * 0.6); star(c, 3, r * 0.8, 1); c.rotate(Math.PI); star(c, 3, r * 0.8, 1); c.restore();
       c.save(); c.rotate(t * 0.9); star(c, 4, r * 0.5, 1); c.restore();
@@ -1356,8 +1501,13 @@
     function buildText(w, h) {
       const L = txt.lines; txt.key = L.join("|") + w + "x" + h;
       const oc = document.createElement("canvas"); oc.width = w; oc.height = h; const x = oc.getContext("2d");
-      const rel = [0.36, 0.11, 0.05], sp = [0, 0.4, 0.34], wt = [900, 700, 600];
-      const ys = L.length === 1 ? [0.5] : L.length === 2 ? [0.45, 0.66] : [0.40, 0.62, 0.74];
+      const isPortrait = h > w;
+      const rel = isPortrait ? [0.18, 0.08, 0.045] : [0.36, 0.11, 0.05];
+      const sp = [0, 0.35, 0.28];
+      const wt = [900, 700, 600];
+      const ys = isPortrait
+        ? (L.length === 1 ? [0.42] : L.length === 2 ? [0.38, 0.52] : [0.32, 0.44, 0.54])
+        : (L.length === 1 ? [0.5] : L.length === 2 ? [0.45, 0.66] : [0.40, 0.62, 0.74]);
       x.fillStyle = "#fff"; x.textBaseline = "middle"; x.textAlign = "left";
       L.forEach((str, li) => {
         let fs = h * rel[li]; const ls = sp[li];
@@ -1379,7 +1529,7 @@
       if (txt.key !== txt.lines.join("|") + w + "x" + h) buildText(w, h);
       const tips = [];
       state.handData.forEach(hd => { const q = handInfo(hd); q.tips.forEach((tp, i) => tips.push({ x: tp.x, y: tp.y, pull: q.pinch < 0.45 && i === 1, big: i === 1 })); });
-      const R = Math.max(70, w * 0.07), R2 = R * R, z = txt.sz;
+      const R = Math.min(55, Math.max(24, w * 0.065)), R2 = R * R, z = txt.sz;
       for (const p of txt.pts) {
         let fx = (p.hx - p.x) * 0.045, fy = (p.hy - p.y) * 0.045;
         for (const tp of tips) {
@@ -1622,7 +1772,7 @@
           c.restore();
         });
 
-        // Two-hand dynamic interaction: energy bridge connecting both hands with proximity fusion
+        // Two-hand dynamic interaction: energy bridge connecting both hands with proximity fusion & Next-Level Cinematic VFX
         if (state.handData.length >= 2) {
           const q1 = handInfo(state.handData[0]);
           const q2 = handInfo(state.handData[1]);
@@ -1630,42 +1780,129 @@
           const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
           const midX = (p1.x + p2.x) * 0.5;
           const midY = (p1.y + p2.y) * 0.5;
+
+          // Continuous proximity factor: 0.0 (distant) to 1.0 (touching / clashing)
+          const prox = Math.max(0.0, Math.min(1.0, 1.0 - (dist - 65) / 285));
           const isClash = dist < 180; // Proximity threshold for fusion / clash state
 
+          // 1. UNIVERSAL MULTI-FINGERTIP BRAIDED QUANTUM FILAMENTS
+          // Links opposing fingertips (Thumb, Index, Middle, Ring, Pinky) with undulating plasma ribbons
+          c.save();
+          for (let f = 0; f < 5; f++) {
+            const t1 = q1.tips[f], t2 = q2.tips[f];
+            if (!t1 || !t2) continue;
+            const fDist = Math.hypot(t2.x - t1.x, t2.y - t1.y);
+            if (fDist < 360) {
+              const fAlpha = (1 - fDist / 360) * (0.35 + prox * 0.65);
+              const isIndex = f === 1;
+              c.strokeStyle = isIndex
+                ? `rgba(255, 255, 255, ${fAlpha})`
+                : (f === 0 || f === 4 ? `rgba(96, 165, 250, ${fAlpha * 0.75})` : `rgba(192, 132, 252, ${fAlpha * 0.8})`);
+              c.lineWidth = isIndex ? (2.2 + prox * 1.5) : (1.2 + prox * 0.8);
+              c.shadowColor = isIndex ? "#60a5fa" : "#c084fc";
+              c.shadowBlur = 10 + prox * 12;
+
+              c.beginPath();
+              const segs = 18;
+              for (let s = 0; s <= segs; s++) {
+                const u = s / segs;
+                const waveAmp = (16 * prox + 6) * Math.sin(u * Math.PI);
+                const waveFreq = u * Math.PI * 3 + t * (6 + f) + f * 1.4;
+                const wave = Math.sin(waveFreq) * waveAmp;
+                const wx = t1.x + (t2.x - t1.x) * u - ((t2.y - t1.y) / fDist) * wave;
+                const wy = t1.y + (t2.y - t1.y) * u + ((t2.x - t1.x) / fDist) * wave;
+                s === 0 ? c.moveTo(wx, wy) : c.lineTo(wx, wy);
+              }
+              c.stroke();
+            }
+          }
+          c.restore();
+
+          // 2. DIPOLAR MAGNETIC FORCEFIELD ARCS BETWEEN PALMS
+          c.save();
+          const arcAlpha = 0.25 + prox * 0.55;
+          const arcColor = state.spell === "SHIELD" ? `rgba(251, 191, 36, ${arcAlpha})`
+            : state.spell === "CHIDORI" ? `rgba(147, 197, 253, ${arcAlpha})`
+            : state.spell === "RASENGAN" ? `rgba(56, 189, 248, ${arcAlpha})`
+            : `rgba(249, 115, 22, ${arcAlpha})`;
+          c.strokeStyle = arcColor;
+          c.lineWidth = 1.4 + prox * 1.6;
+          c.shadowColor = arcColor;
+          c.shadowBlur = 12;
+
+          for (const sign of [-1, 1]) {
+            c.beginPath();
+            c.moveTo(p1.x, p1.y);
+            const bow = sign * Math.min(dist * 0.45, 95) * (0.35 + prox * 0.65);
+            const nx = -((p2.y - p1.y) / dist) * bow;
+            const ny = ((p2.x - p1.x) / dist) * bow;
+            c.quadraticCurveTo(midX + nx, midY + ny, p2.x, p2.y);
+            c.stroke();
+          }
+          c.restore();
+
+          // 3. MIDPOINT EXPANDING HARMONIC SHOCKWAVES
+          if (prox > 0.2) {
+            c.save();
+            c.strokeStyle = arcColor;
+            c.lineWidth = 1.5;
+            for (let ring = 0; ring < 3; ring++) {
+              const ringR = ((t * 45 + ring * 25) % (80 + prox * 80));
+              const ringAlpha = Math.max(0, 1 - ringR / (80 + prox * 80)) * prox * 0.6;
+              c.globalAlpha = ringAlpha;
+              c.beginPath();
+              c.arc(midX, midY, ringR, 0, TAU);
+              c.stroke();
+            }
+            c.restore();
+          }
+
+          // 4. SPELL-SPECIFIC CINEMATIC CLASH / FUSION
           if (state.spell === "CHIDORI") {
             c.save();
             if (isClash) {
-              // CHIDORI CLASH: Blinding plasma explosion sphere with branching discharge
-              const clashRatio = Math.max(0, 1 - dist / 180);
-              glow(c, midX, midY, 60 + clashRatio * 50, "rgba(255, 255, 255, 0.95)", "rgba(96, 165, 250, 0)");
-              c.strokeStyle = "rgba(255, 255, 255, 0.98)";
-              c.lineWidth = 3.5;
-              c.shadowColor = "#93c5fd";
-              c.shadowBlur = 24;
-              strokePts(c, bolt(p1.x, p1.y, p2.x, p2.y, 45, 5));
-              // Omnidirectional lightning bursts
-              for (let i = 0; i < 4; i++) {
-                const a = (i * Math.PI) / 2 + t * 4;
-                const bx = midX + Math.cos(a) * (70 + clashRatio * 40);
-                const by = midY + Math.sin(a) * (70 + clashRatio * 40);
-                strokePts(c, bolt(midX, midY, bx, by, 35, 4));
+              // CHIDORI CLASH: Blinding plasma explosion sphere with branching discharge & multi-layer fractal lightning
+              const blastR = 65 + prox * 65;
+              glow(c, midX, midY, blastR * 1.4, "rgba(255, 255, 255, 0.98)", "rgba(59, 130, 246, 0)");
+              glow(c, midX, midY, blastR * 0.5, "rgba(255, 255, 255, 1.0)", "rgba(147, 197, 253, 0)");
+
+              // Core lightning connection
+              c.strokeStyle = "#ffffff";
+              c.lineWidth = 4.2;
+              c.shadowColor = "#38bdf8";
+              c.shadowBlur = 28;
+              strokePts(c, bolt(p1.x, p1.y, p2.x, p2.y, 48, 5));
+
+              // 8-directional branching discharge
+              for (let i = 0; i < 8; i++) {
+                const a = (i * Math.PI) / 4 + t * 4.5;
+                const len = blastR + 25 + Math.sin(t * 12 + i) * 20;
+                const bx = midX + Math.cos(a) * len;
+                const by = midY + Math.sin(a) * len;
+                c.strokeStyle = (i % 2 === 0) ? "rgba(255, 255, 255, 0.95)" : "rgba(147, 197, 253, 0.9)";
+                c.lineWidth = (i % 2 === 0) ? 3.0 : 1.8;
+                strokePts(c, bolt(midX, midY, bx, by, 32, 4));
               }
-              for (let i = 0; i < 2; i++) {
-                emit(midX + (Math.random() - 0.5) * 30, midY + (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, "#ffffff", 3.5);
+
+              // High-velocity orbital electric embers
+              for (let i = 0; i < 4; i++) {
+                const ea = Math.random() * TAU;
+                const er = blastR * (0.4 + Math.random() * 0.6);
+                emit(midX + Math.cos(ea) * er, midY + Math.sin(ea) * er, (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, "#ffffff", 4);
               }
             } else {
               // High-voltage lightning bridge connecting palms and index fingertips
               c.strokeStyle = "rgba(147, 197, 253, 0.95)";
-              c.lineWidth = 3;
+              c.lineWidth = 3.2;
               c.shadowColor = "#60a5fa";
-              c.shadowBlur = 16;
+              c.shadowBlur = 18;
               strokePts(c, bolt(p1.x, p1.y, p2.x, p2.y, Math.min(dist * 0.35, 60), 4));
               if (q1.tips[1] && q2.tips[1]) {
-                c.strokeStyle = "rgba(255, 255, 255, 0.9)";
-                c.lineWidth = 1.8;
+                c.strokeStyle = "rgba(255, 255, 255, 0.92)";
+                c.lineWidth = 2.0;
                 strokePts(c, bolt(q1.tips[1].x, q1.tips[1].y, q2.tips[1].x, q2.tips[1].y, Math.min(dist * 0.25, 40), 3));
               }
-              if (Math.random() < 0.4) {
+              if (Math.random() < 0.45) {
                 emit(midX + (Math.random() - 0.5) * 20, midY + (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, "#93c5fd", 3);
               }
             }
@@ -1673,79 +1910,104 @@
           } else if (state.spell === "SHIELD") {
             c.save();
             if (isClash) {
-              // AEGIS BULWARK FUSION: Massive fused shield wall with counter-rotating sacred geometry
-              const shieldR = Math.max(q1.span, q2.span) * 2.2;
-              glow(c, midX, midY, shieldR * 1.3, "rgba(251, 191, 36, 0.45)", "rgba(245, 158, 11, 0)");
+              // AEGIS BULWARK FUSION: Dual counter-rotating 12-point Merkaba stars with celestial light beams
+              const shieldR = Math.max(q1.span, q2.span) * 2.3;
+              glow(c, midX, midY, shieldR * 1.5, "rgba(251, 191, 36, 0.55)", "rgba(245, 158, 11, 0)");
+              glow(c, midX, midY, shieldR * 0.35, "rgba(255, 255, 255, 0.95)", "rgba(251, 191, 36, 0)");
+
               c.translate(midX, midY);
               c.shadowColor = "#f59e0b";
-              c.shadowBlur = 20;
-              c.strokeStyle = "rgba(254, 240, 138, 0.95)";
-              c.lineWidth = 3.2;
+              c.shadowBlur = 24;
+
+              // Outer boundary ring with sacred geometry divisions
+              c.strokeStyle = "rgba(254, 240, 138, 0.98)";
+              c.lineWidth = 3.5;
               c.beginPath(); c.arc(0, 0, shieldR, 0, TAU); c.stroke();
-              c.lineWidth = 1.8;
-              c.save(); c.rotate(t * 1.2); star(c, 8, shieldR * 0.85, 3); c.restore();
-              c.save(); c.rotate(-t * 1.6); star(c, 12, shieldR * 0.55, 5); c.restore();
-              glow(c, 0, 0, shieldR * 0.25, "rgba(255, 255, 255, 0.95)", "rgba(251, 191, 36, 0)");
+
+              // Celestial God-Rays radiating from center
+              c.lineWidth = 1.6;
+              c.strokeStyle = "rgba(254, 240, 138, 0.4)";
+              for (let r = 0; r < 8; r++) {
+                const ra = (r * TAU) / 8 + t * 0.6;
+                c.beginPath();
+                c.moveTo(0, 0);
+                c.lineTo(Math.cos(ra) * (shieldR * 1.3), Math.sin(ra) * (shieldR * 1.3));
+                c.stroke();
+              }
+
+              // Counter-rotating 12-point and 8-point sacred stars
+              c.lineWidth = 2.0;
+              c.strokeStyle = "#fde047";
+              c.save(); c.rotate(t * 1.4); star(c, 12, shieldR * 0.88, 5); c.restore();
+              c.save(); c.rotate(-t * 1.8); star(c, 8, shieldR * 0.58, 3); c.restore();
               c.translate(-midX, -midY);
-              if (Math.random() < 0.7) {
+
+              // Golden ember flare emissions
+              for (let i = 0; i < 3; i++) {
                 const a = Math.random() * TAU;
-                emit(midX + Math.cos(a) * shieldR, midY + Math.sin(a) * shieldR, Math.cos(a) * 3, Math.sin(a) * 3, "#fde047", 3);
+                emit(midX + Math.cos(a) * shieldR, midY + Math.sin(a) * shieldR, Math.cos(a) * 3.5, Math.sin(a) * 3.5, "#fde047", 3.2);
               }
             } else {
               // Two-hand harmonic energy barrier bridging between shields
-              c.strokeStyle = "rgba(251, 191, 36, 0.85)";
-              c.lineWidth = 2.4;
+              c.strokeStyle = "rgba(251, 191, 36, 0.88)";
+              c.lineWidth = 2.6;
               c.shadowColor = "#f59e0b";
-              c.shadowBlur = 14;
+              c.shadowBlur = 16;
               c.beginPath();
               c.moveTo(p1.x, p1.y);
-              const cpY = midY + Math.sin(t * 3) * 25;
+              const cpY = midY + Math.sin(t * 3.5) * 28;
               c.quadraticCurveTo(midX, cpY, p2.x, p2.y);
               c.stroke();
               c.beginPath();
-              c.arc(midX, midY, Math.min(dist * 0.22, 48), 0, TAU);
-              c.strokeStyle = "rgba(245, 158, 11, 0.65)";
+              c.arc(midX, midY, Math.min(dist * 0.24, 52), 0, TAU);
+              c.strokeStyle = "rgba(245, 158, 11, 0.7)";
               c.stroke();
             }
             c.restore();
           } else if (state.spell === "RASENGAN") {
             c.save();
             if (isClash) {
-              // OODAMA CHAKRA VORTEX: Combined giant sphere with dense spinning orbital rings
-              const sphereR = Math.max(q1.span, q2.span) * 1.8;
-              glow(c, midX, midY, sphereR * 1.6, "rgba(56, 189, 248, 0.55)", "rgba(2, 132, 199, 0)");
+              // OODAMA CHAKRA VORTEX: Multi-axis 3D orbital rings & photon sphere event horizon
+              const sphereR = Math.max(q1.span, q2.span) * 2.0;
+              glow(c, midX, midY, sphereR * 1.7, "rgba(56, 189, 248, 0.65)", "rgba(2, 132, 199, 0)");
+              glow(c, midX, midY, sphereR * 0.4, "rgba(255, 255, 255, 1.0)", "rgba(56, 189, 248, 0)");
+
               c.shadowColor = "#38bdf8";
-              c.shadowBlur = 22;
-              c.lineWidth = 2.2;
-              for (let k = 0; k < 4; k++) {
-                c.strokeStyle = "rgba(186, 230, 253, 0.85)";
+              c.shadowBlur = 25;
+              c.lineWidth = 2.4;
+
+              // 6 High-speed tilted orbital accretion discs
+              for (let k = 0; k < 6; k++) {
+                c.strokeStyle = (k % 2 === 0) ? "rgba(255, 255, 255, 0.95)" : "rgba(186, 230, 253, 0.85)";
                 c.beginPath();
+                const tilt = 0.45 + (k % 3) * 0.25;
                 for (let u = 0; u <= 1; u += 0.02) {
-                  const a = (k * TAU) / 4 + u * 12 - t * 8;
-                  const rr = sphereR * (1 - u * 0.9);
+                  const a = (k * TAU) / 6 + u * 14 - t * 9;
+                  const rr = sphereR * (1 - u * 0.85);
                   const x = midX + Math.cos(a) * rr;
-                  const y = midY + Math.sin(a) * rr * 0.7;
+                  const y = midY + Math.sin(a) * rr * tilt;
                   u === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
                 }
                 c.stroke();
               }
-              glow(c, midX, midY, sphereR * 0.35, "rgba(255, 255, 255, 0.98)", "rgba(56, 189, 248, 0)");
-              for (let i = 0; i < 2; i++) {
+
+              // Inward spiral chakra streams converging into the black-hole event horizon
+              for (let i = 0; i < 4; i++) {
                 const a = Math.random() * TAU;
-                emit(midX + Math.cos(a) * sphereR, midY + Math.sin(a) * sphereR, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, "#7dd3fc", 3);
+                emit(midX + Math.cos(a) * sphereR, midY + Math.sin(a) * sphereR, (Math.random() - 0.5) * 7, (Math.random() - 0.5) * 7, "#7dd3fc", 3.5);
               }
             } else {
               // Dual-core spiral vortex linking both chakra spheres
-              c.strokeStyle = "rgba(56, 189, 248, 0.9)";
-              c.lineWidth = 2.2;
+              c.strokeStyle = "rgba(56, 189, 248, 0.95)";
+              c.lineWidth = 2.5;
               c.shadowColor = "#0284c7";
-              c.shadowBlur = 14;
-              const steps = 24;
+              c.shadowBlur = 16;
+              const steps = 28;
               c.beginPath();
               for (let i = 0; i <= steps; i++) {
                 const u = i / steps;
                 const x = p1.x + (p2.x - p1.x) * u;
-                const y = p1.y + (p2.y - p1.y) * u + Math.sin(u * Math.PI * 4 + t * 5) * 18;
+                const y = p1.y + (p2.y - p1.y) * u + Math.sin(u * Math.PI * 4 + t * 5.5) * 22;
                 i === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
               }
               c.stroke();
@@ -1754,35 +2016,43 @@
           } else {
             c.save();
             if (isClash) {
-              // WORMHOLE COLLAPSE: Spiraling gravitational rift between sling rings
-              const portalR = Math.max(q1.span, q2.span) * 2.2;
-              glow(c, midX, midY, portalR * 1.4, "rgba(249, 115, 22, 0.6)", "rgba(194, 65, 12, 0)");
-              c.strokeStyle = "rgba(254, 215, 170, 0.95)";
-              c.lineWidth = 3;
+              // WORMHOLE COLLAPSE: Relativistic gravitational funnel with burning event horizon
+              const portalR = Math.max(q1.span, q2.span) * 2.3;
+              glow(c, midX, midY, portalR * 1.6, "rgba(249, 115, 22, 0.65)", "rgba(194, 65, 12, 0)");
+              glow(c, midX, midY, portalR * 0.45, "rgba(255, 237, 213, 0.98)", "rgba(249, 115, 22, 0)");
+
+              c.strokeStyle = "rgba(254, 215, 170, 0.98)";
+              c.lineWidth = 3.2;
               c.shadowColor = "#ea580c";
-              c.shadowBlur = 20;
-              c.beginPath();
-              for (let u = 0; u <= 1; u += 0.02) {
-                const a = u * TAU * 3 + t * 4;
-                const r = portalR * (1 - u * 0.9);
-                const x = midX + Math.cos(a) * r;
-                const y = midY + Math.sin(a) * r;
-                u === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+              c.shadowBlur = 24;
+
+              // 4-armed golden spiral accretion funnel
+              for (let arm = 0; arm < 4; arm++) {
+                c.beginPath();
+                for (let u = 0; u <= 1; u += 0.02) {
+                  const a = (arm * TAU) / 4 + u * TAU * 3 + t * 5;
+                  const r = portalR * (1 - u * 0.9);
+                  const x = midX + Math.cos(a) * r;
+                  const y = midY + Math.sin(a) * r;
+                  u === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+                }
+                c.stroke();
               }
-              c.stroke();
-              for (let i = 0; i < 3; i++) {
+
+              // Inward sucked relativistic particle streams
+              for (let i = 0; i < 4; i++) {
                 const a = Math.random() * TAU;
-                emit(midX + Math.cos(a) * portalR, midY + Math.sin(a) * portalR, -Math.cos(a) * 4, -Math.sin(a) * 4, "#fb923c", 3.2);
+                emit(midX + Math.cos(a) * portalR, midY + Math.sin(a) * portalR, -Math.cos(a) * 4.5, -Math.sin(a) * 4.5, "#fb923c", 3.5);
               }
             } else {
               // Dimensional wormhole bridge between sling portals
-              c.strokeStyle = "rgba(249, 115, 22, 0.85)";
-              c.lineWidth = 2.5;
+              c.strokeStyle = "rgba(249, 115, 22, 0.9)";
+              c.lineWidth = 2.8;
               c.shadowColor = "#ea580c";
-              c.shadowBlur = 16;
-              strokePts(c, bolt(p1.x, p1.y, p2.x, p2.y, Math.min(dist * 0.25, 45), 3));
-              if (Math.random() < 0.35) {
-                emit(midX, midY, (Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5, "#fb923c", 2.5);
+              c.shadowBlur = 18;
+              strokePts(c, bolt(p1.x, p1.y, p2.x, p2.y, Math.min(dist * 0.25, 48), 3));
+              if (Math.random() < 0.4) {
+                emit(midX, midY, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, "#fb923c", 2.8);
               }
             }
             c.restore();
@@ -1942,13 +2212,96 @@
       c.save();
       if (state.flash > 0) { c.fillStyle = `rgba(255,30,70,${state.flash * 0.25})`; c.fillRect(0, 0, w, h); state.flash -= 0.06; }
       if (state.gmode !== "ARCADE" && state.quiz) {
-        c.save(); c.globalCompositeOperation = "source-over"; const bw = Math.min(w * 0.9, 560), bx = w / 2 - bw / 2;
-        c.fillStyle = "rgba(6,8,20,0.72)"; c.strokeStyle = "rgba(56,189,248,0.6)"; c.lineWidth = 1.5; c.beginPath(); c.roundRect(bx, 84, bw, 52, 14); c.fill(); c.stroke();
-        c.fillStyle = "#fff"; c.font = "bold 24px system-ui, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(state.quiz.t, w / 2, 110);
-        if (state.fbT > 0) { state.fbT--; c.globalAlpha = Math.min(1, state.fbT / 30); c.fillStyle = state.fbGood ? "#34d399" : "#fb7185"; c.font = "600 16px system-ui, sans-serif"; c.fillText(state.fb, w / 2, 156); }
+        c.save();
+        c.globalCompositeOperation = "source-over";
+        const bw = Math.min(w * 0.92, 580), bx = w / 2 - bw / 2;
+        const by = 104;
+        const qText = state.quiz.t || "";
+
+        // Dynamic font sizing & multi-line wrapping so text never spills out of gray card
+        let fontSize = 20;
+        c.font = `700 ${fontSize}px system-ui, -apple-system, sans-serif`;
+        const maxTextWidth = bw - 36;
+        let textWidth = c.measureText(qText).width;
+
+        if (textWidth > maxTextWidth) {
+          fontSize = Math.max(13, Math.floor(fontSize * (maxTextWidth / textWidth)));
+          c.font = `700 ${fontSize}px system-ui, -apple-system, sans-serif`;
+          textWidth = c.measureText(qText).width;
+        }
+
+        let lines = [qText];
+        if (textWidth > maxTextWidth) {
+          const words = qText.split(" ");
+          lines = [];
+          let cur = "";
+          for (const word of words) {
+            const test = cur ? cur + " " + word : word;
+            if (c.measureText(test).width <= maxTextWidth) {
+              cur = test;
+            } else {
+              if (cur) lines.push(cur);
+              cur = word;
+            }
+          }
+          if (cur) lines.push(cur);
+          fontSize = 13;
+          c.font = `700 ${fontSize}px system-ui, -apple-system, sans-serif`;
+        }
+
+        const boxH = lines.length > 1 ? 64 : 50;
+
+        // Card Container Box (non-overlapping below status badge)
+        c.fillStyle = "rgba(10, 14, 23, 0.88)";
+        c.strokeStyle = "rgba(56, 189, 248, 0.55)";
+        c.lineWidth = 1.5;
+        c.beginPath();
+        c.roundRect(bx, by, bw, boxH, 12);
+        c.fill();
+        c.stroke();
+
+        // Card Question Text
+        c.fillStyle = "#f8fafc";
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        if (lines.length === 1) {
+          c.fillText(lines[0], w / 2, by + boxH / 2);
+        } else {
+          const lineGap = fontSize * 1.25;
+          const startY = by + boxH / 2 - ((lines.length - 1) * lineGap) / 2;
+          lines.forEach((line, li) => {
+            c.fillText(line, w / 2, startY + li * lineGap);
+          });
+        }
+
+        // Distinct Non-Overlapping Feedback Pill
+        if (state.fbT > 0) {
+          state.fbT--;
+          c.globalAlpha = Math.min(1, state.fbT / 25);
+          const fbText = state.fb || "";
+          c.font = "600 13px system-ui, -apple-system, sans-serif";
+          const fbw = Math.min(bw, c.measureText(fbText).width + 32);
+          const fbh = 28;
+          const fby = by + boxH + 8;
+          const fbx = w / 2 - fbw / 2;
+
+          c.fillStyle = state.fbGood ? "rgba(6, 78, 59, 0.90)" : "rgba(136, 19, 55, 0.90)";
+          c.strokeStyle = state.fbGood ? "rgba(52, 211, 153, 0.7)" : "rgba(251, 113, 133, 0.7)";
+          c.lineWidth = 1;
+          c.beginPath();
+          c.roundRect(fbx, fby, fbw, fbh, 14);
+          c.fill();
+          c.stroke();
+
+          c.fillStyle = state.fbGood ? "#a7f3d0" : "#fecdd3";
+          c.fillText(fbText, w / 2, fby + fbh / 2);
+        }
         c.restore();
       }
       const targets = [head, ...hands].filter(Boolean);
+      for (const [ptrId, ptr] of activePointers.entries()) {
+        if (ptr.isDown) targets.push({ x: ptr.x, y: ptr.y, isPointer: true });
+      }
       for (let i = state.gems.length - 1; i >= 0; i--) {
         const g = state.gems[i];
         if (g.dead) { state.gems.splice(i, 1); continue; }
@@ -2526,6 +2879,10 @@
             state.mirrorView = false;
             const bcf = document.getElementById("btn-camera-flip");
             if (bcf) bcf.classList.toggle("active", false);
+          } else {
+            state.mirrorView = true;
+            const bcf = document.getElementById("btn-camera-flip");
+            if (bcf) bcf.classList.toggle("active", true);
           }
         }
       }
@@ -2660,8 +3017,124 @@
     }
 
     document.querySelectorAll("#prism-dock .filter-tab").forEach(tab => {
+      if (tab.id === "btn-prism-lock") return;
       tab.addEventListener("click", () => setFilterMode(tab.dataset.filter));
     });
+
+    // Spatial Prism Quad Lock Button
+    const btnPrismPrev = document.getElementById("btn-prism-prev");
+    if (btnPrismPrev) {
+      btnPrismPrev.addEventListener("click", () => {
+        const curIdx = FILTERS.indexOf(state.filter);
+        const prevIdx = (curIdx - 1 + FILTERS.length) % FILTERS.length;
+        setFilterMode(FILTERS[prevIdx]);
+        playAudioTone(580, "triangle", 0.12, 0.2);
+        badge(`PRISM FILTER · ${FILTERS[prevIdx]}`);
+      });
+    }
+
+    const btnPrismNext = document.getElementById("btn-prism-next");
+    if (btnPrismNext) {
+      btnPrismNext.addEventListener("click", () => {
+        const curIdx = FILTERS.indexOf(state.filter);
+        const nextIdx = (curIdx + 1) % FILTERS.length;
+        setFilterMode(FILTERS[nextIdx]);
+        playAudioTone(740, "triangle", 0.12, 0.2);
+        badge(`PRISM FILTER · ${FILTERS[nextIdx]}`);
+      });
+    }
+
+    const btnPrismLock = document.getElementById("btn-prism-lock");
+    if (btnPrismLock) {
+      btnPrismLock.addEventListener("click", () => {
+        state.prismLocked = !state.prismLocked;
+        if (state.prismLocked) {
+          state.prismActive = true;
+          state.prismOpacity = 1.0;
+        }
+        btnPrismLock.classList.toggle("active", state.prismLocked);
+        btnPrismLock.textContent = state.prismLocked ? "Quad: Locked" : "Lock Quad";
+        badge(state.prismLocked ? "SPATIAL PRISM · QUAD LOCKED IN PLACE" : "SPATIAL PRISM · TRACKING AIR PINCH");
+        playAudioTone(state.prismLocked ? 720 : 480, "sine", 0.1);
+      });
+    }
+
+    // Spatial Prism Mouse & Touch Screen Corner Dragging
+    let draggingPrismCorner = null;
+
+    function handlePrismPointerDown(e) {
+      if (state.scene !== "PRISM") return;
+      if (e.target.closest("button, .interactive, .dock-container, .scene-pill, .modal, .settings-drawer, .tour-card, input, select")) return;
+
+      const rect = vecCanvas.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
+
+      const px = (e.clientX - rect.left) * (vecCanvas.width / rect.width);
+      const py = (e.clientY - rect.top) * (vecCanvas.height / rect.height);
+      const cw = vecCanvas.width, ch = vecCanvas.height;
+
+      // Find nearest corner if quad is active or engage quad on touch
+      const cornerCoords = {
+        tl: { x: state.corners.tl.x * cw, y: state.corners.tl.y * ch },
+        tr: { x: state.corners.tr.x * cw, y: state.corners.tr.y * ch },
+        br: { x: state.corners.br.x * cw, y: state.corners.br.y * ch },
+        bl: { x: state.corners.bl.x * cw, y: state.corners.bl.y * ch }
+      };
+
+      let closestCorner = null;
+      let minDist = 55; // 55px touch target radius
+      for (const [k, pt] of Object.entries(cornerCoords)) {
+        const d = Math.hypot(px - pt.x, py - pt.y);
+        if (d < minDist) {
+          minDist = d;
+          closestCorner = k;
+        }
+      }
+
+      if (closestCorner) {
+        draggingPrismCorner = closestCorner;
+        state.prismActive = true;
+        state.prismLocked = true;
+        if (btnPrismLock) {
+          btnPrismLock.classList.add("active");
+          btnPrismLock.textContent = "Quad: Locked";
+        }
+      } else if (!state.prismActive) {
+        // Tap to engage default central quad
+        state.targetCorners = {
+          tl: { x: Math.max(0.05, (px - 140) / cw), y: Math.max(0.05, (py - 140) / ch) },
+          tr: { x: Math.min(0.95, (px + 140) / cw), y: Math.max(0.05, (py - 140) / ch) },
+          br: { x: Math.min(0.95, (px + 140) / cw), y: Math.min(0.95, (py + 140) / ch) },
+          bl: { x: Math.max(0.05, (px - 140) / cw), y: Math.min(0.95, (py + 140) / ch) }
+        };
+        state.prismActive = true;
+        state.prismLocked = true;
+        if (btnPrismLock) {
+          btnPrismLock.classList.add("active");
+          btnPrismLock.textContent = "Quad: Locked";
+        }
+      }
+    }
+
+    function handlePrismPointerMove(e) {
+      if (state.scene !== "PRISM" || !draggingPrismCorner) return;
+      const rect = vecCanvas.getBoundingClientRect();
+      const px = (e.clientX - rect.left) * (vecCanvas.width / rect.width);
+      const py = (e.clientY - rect.top) * (vecCanvas.height / rect.height);
+      const normX = Math.max(0.0, Math.min(1.0, px / vecCanvas.width));
+      const normY = Math.max(0.0, Math.min(1.0, py / vecCanvas.height));
+      state.targetCorners[draggingPrismCorner].x = normX;
+      state.targetCorners[draggingPrismCorner].y = normY;
+    }
+
+    function handlePrismPointerUp() {
+      draggingPrismCorner = null;
+    }
+
+    window.addEventListener("pointerdown", handlePrismPointerDown, { passive: true });
+    window.addEventListener("pointermove", handlePrismPointerMove, { passive: true });
+    window.addEventListener("pointerup", handlePrismPointerUp, { passive: true });
+    window.addEventListener("pointercancel", handlePrismPointerUp, { passive: true });
 
     // Mystic Live Feed / Galaxy Background Toggle
     const btnMysticFeed = document.getElementById("btn-mystic-feed");
@@ -2778,6 +3251,42 @@
       });
     });
 
+    // Custom Color Pickers and Blush Swatches
+    const pickerLip = document.getElementById("picker-lip-color");
+    if (pickerLip) {
+      pickerLip.addEventListener("input", e => {
+        document.querySelectorAll("[data-lip]").forEach(s => s.classList.remove("active"));
+        state.lipColor = e.target.value;
+      });
+    }
+
+    const pickerHair = document.getElementById("picker-hair-color");
+    if (pickerHair) {
+      pickerHair.addEventListener("input", e => {
+        document.querySelectorAll("[data-hair]").forEach(s => s.classList.remove("active"));
+        const hex = e.target.value;
+        HAIR_PALETTES["custom"] = [hex, hex];
+        state.hairShade = "custom";
+      });
+    }
+
+    document.querySelectorAll("[data-blush]").forEach(sw => {
+      sw.addEventListener("click", () => {
+        document.querySelectorAll("[data-blush]").forEach(s => s.classList.remove("active"));
+        sw.classList.add("active");
+        state.blushColor = sw.dataset.blush || sw.getAttribute("data-blush");
+        playAudioTone(520, "sine", 0.08, 0.15);
+      });
+    });
+
+    const pickerBlush = document.getElementById("picker-blush-color");
+    if (pickerBlush) {
+      pickerBlush.addEventListener("input", e => {
+        document.querySelectorAll("[data-blush]").forEach(s => s.classList.remove("active"));
+        state.blushColor = e.target.value;
+      });
+    }
+
     // Sliders
     function setupSlider(id, valId, key, options = {}) {
       const slider = document.getElementById(id);
@@ -2808,6 +3317,7 @@
     setupSlider("slider-skin", "val-skin", "skinSmooth");
     setupSlider("slider-zoom", "val-zoom", "zoom");
     setupSlider("slider-lip-opacity", "val-lip-opacity", "lipOpacity");
+    setupSlider("slider-blush-opacity", "val-blush-opacity", "blushOpacity");
     setupSlider("slider-plexus-radius", "val-plexus-radius", "plexusRadius", { unit: "px", divisor: 1 });
     setupSlider("slider-flock-count", "val-flock-count", "flockCount", { unit: "", divisor: 1 });
     setupSlider("slider-flock-speed", "val-flock-speed", "flockSpeed");
@@ -2817,6 +3327,9 @@
     btnCamFlip.addEventListener("click", () => {
       state.mirrorView = !state.mirrorView;
       btnCamFlip.classList.toggle("active", state.mirrorView);
+      btnCamFlip.title = state.mirrorView ? "Mirror View: ON (Active)" : "Mirror View: OFF (Natural)";
+      badge(state.mirrorView ? "MIRROR VIEW · ON (FLIPPED)" : "MIRROR VIEW · OFF (NATURAL)");
+      playAudioTone(state.mirrorView ? 660 : 440, "sine", 0.08);
     });
 
     const btnAudio = document.getElementById("btn-audio-toggle");
@@ -2990,24 +3503,27 @@
                   leftHand = sorted[0]; rightHand = sorted[sorted.length - 1];
                   state.lastLeftHand = { sIndex: { ...leftHand.sIndex }, sThumb: { ...leftHand.sThumb }, isPinching: leftHand.isPinching };
                   state.lastRightHand = { sIndex: { ...rightHand.sIndex }, sThumb: { ...rightHand.sThumb }, isPinching: rightHand.isPinching };
-                } else if (state.handData.length === 1 && state.prismActive && (state.lastLeftHand || state.lastRightHand)) {
-                  // Single hand visible: anchor out-of-frame hand to absolute screen edge (0.0 or 1.0)
+                } else if (state.handData.length === 1) {
+                  // Single hand visible (e.g. mobile phone in one hand, pinching with other):
+                  // Anchor out-of-frame side to screen edge
                   const single = state.handData[0];
                   if (single.sMid.normX < 0.5) {
                     leftHand = single;
                     rightHand = {
                       sIndex: { normX: 1.0, normY: single.sIndex.normY },
                       sThumb: { normX: 1.0, normY: single.sThumb.normY },
-                      isPinching: true
+                      isPinching: single.isPinching
                     };
                   } else {
                     rightHand = single;
                     leftHand = {
                       sIndex: { normX: 0.0, normY: single.sIndex.normY },
                       sThumb: { normX: 0.0, normY: single.sThumb.normY },
-                      isPinching: true
+                      isPinching: single.isPinching
                     };
                   }
+                  state.lastLeftHand = { sIndex: { ...leftHand.sIndex }, sThumb: { ...leftHand.sThumb }, isPinching: leftHand.isPinching };
+                  state.lastRightHand = { sIndex: { ...rightHand.sIndex }, sThumb: { ...rightHand.sThumb }, isPinching: rightHand.isPinching };
                 }
 
                 const dualPinch = leftHand && rightHand && leftHand.isPinching && rightHand.isPinching;
@@ -3054,6 +3570,73 @@
                 state.lastWinkTime = timeMs;
                 const nextIdx = (FILTERS.indexOf(state.filter) + 1) % FILTERS.length;
                 setFilterMode(FILTERS[nextIdx]);
+                playAudioTone(720, "triangle", 0.12, 0.2);
+                badge(`PRISM FILTER · ${FILTERS[nextIdx]}`);
+              }
+
+              // Head Turn Left / Right gesture navigation for Spatial Prism
+              if (state.scene === "PRISM" && state.faceLandmarks) {
+                const fl = state.faceLandmarks;
+                const nose = fl[1], leftCh = fl[234], rightCh = fl[454];
+                if (nose && leftCh && rightCh) {
+                  const faceW = Math.abs(rightCh.x - leftCh.x) || 0.2;
+                  const rawYaw = (nose.x - (leftCh.x + rightCh.x) * 0.5) / faceW;
+                  const yaw = state.mirrorView ? -rawYaw : rawYaw;
+
+                  if (Math.abs(yaw) < 0.08) {
+                    state.headTurnArmed = true;
+                  } else if (state.headTurnArmed && (timeMs - (state.lastHeadTurnTime || 0) > 750)) {
+                    if (yaw > 0.20) {
+                      state.lastHeadTurnTime = timeMs;
+                      state.headTurnArmed = false;
+                      const curIdx = FILTERS.indexOf(state.filter);
+                      const nextIdx = (curIdx + 1) % FILTERS.length;
+                      setFilterMode(FILTERS[nextIdx]);
+                      playAudioTone(760, "triangle", 0.12, 0.25);
+                      badge(`HEAD TURN RIGHT · ${FILTERS[nextIdx]}`);
+                    } else if (yaw < -0.20) {
+                      state.lastHeadTurnTime = timeMs;
+                      state.headTurnArmed = false;
+                      const curIdx = FILTERS.indexOf(state.filter);
+                      const prevIdx = (curIdx - 1 + FILTERS.length) % FILTERS.length;
+                      setFilterMode(FILTERS[prevIdx]);
+                      playAudioTone(560, "triangle", 0.12, 0.25);
+                      badge(`HEAD TURN LEFT · ${FILTERS[prevIdx]}`);
+                    }
+                  }
+                }
+              }
+
+              // Horizontal Hand Swipe gesture navigation for Spatial Prism
+              if (state.scene === "PRISM" && state.handData.length > 0) {
+                const curHandX = state.handData[0].sMid.normX;
+                if (prevHandX !== null && prevHandTime > 0 && (timeMs - prevHandTime) < 250) {
+                  const dt = Math.max(0.016, (timeMs - prevHandTime) / 1000);
+                  const dx = curHandX - prevHandX;
+                  const vx = dx / dt;
+
+                  if ((timeMs - lastHandSwipeTime > 650) && Math.abs(vx) > 1.4 && Math.abs(dx) > 0.07) {
+                    lastHandSwipeTime = timeMs;
+                    const curIdx = FILTERS.indexOf(state.filter);
+                    if (vx > 0) {
+                      // Swipe Right -> Next Filter
+                      const nextIdx = (curIdx + 1) % FILTERS.length;
+                      setFilterMode(FILTERS[nextIdx]);
+                      playAudioTone(740, "triangle", 0.12, 0.25);
+                      badge(`SWIPE NEXT · ${FILTERS[nextIdx]}`);
+                    } else {
+                      // Swipe Left -> Prev Filter
+                      const prevIdx = (curIdx - 1 + FILTERS.length) % FILTERS.length;
+                      setFilterMode(FILTERS[prevIdx]);
+                      playAudioTone(580, "triangle", 0.12, 0.25);
+                      badge(`SWIPE PREV · ${FILTERS[prevIdx]}`);
+                    }
+                  }
+                }
+                prevHandX = curHandX;
+                prevHandTime = timeMs;
+              } else if (state.handData.length === 0) {
+                prevHandX = null;
               }
             }
           }
@@ -3347,7 +3930,20 @@
     const bannerInstallBtn = document.getElementById("btn-banner-install");
     const bannerDismissBtn = document.getElementById("btn-banner-dismiss");
 
+    // Detect standalone / installed PWA or APK wrapper mode
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                         window.navigator.standalone === true || 
+                         (document.referrer && document.referrer.includes('android-app://'));
+
+    // Suppress PWA install banner and row if running inside installed APK / PWA
+    if (isStandalone) {
+      if (pwaBanner) pwaBanner.style.display = "none";
+      const rowInstall = document.getElementById("row-install");
+      if (rowInstall) rowInstall.style.display = "none";
+    }
+
     window.addEventListener("beforeinstallprompt", e => {
+      if (isStandalone) return;
       e.preventDefault();
       deferredInstall = e;
       document.getElementById("row-install").style.display = "flex";
@@ -3402,6 +3998,49 @@
        ========================================================================= */
     const musicRipples = [];
     const activeFingerTouches = new Map(); // key: fingerId -> active target key/pad
+    const activePointers = new Map(); // key: pointerId -> { x, y, isDown, isPointer }
+
+    // Mouse & Multi-Touch screen interaction for Air Music
+    function handleMusicPointerDown(e) {
+      if (state.scene !== "MUSIC") return;
+      if (e.target.closest("button, .interactive, .dock-container, .scene-pill, .modal, .settings-drawer, .tour-card, input, select")) return;
+
+      if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+
+      const rect = vecCanvas.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
+
+      const x = (e.clientX - rect.left) * (vecCanvas.width / rect.width);
+      const y = (e.clientY - rect.top) * (vecCanvas.height / rect.height);
+      activePointers.set(e.pointerId, { x, y, isDown: true, isPointer: true });
+      if (e.cancelable) e.preventDefault();
+    }
+
+    function handleMusicPointerMove(e) {
+      if (state.scene !== "MUSIC") return;
+      if (!activePointers.has(e.pointerId)) return;
+
+      const rect = vecCanvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (vecCanvas.width / rect.width);
+      const y = (e.clientY - rect.top) * (vecCanvas.height / rect.height);
+      activePointers.set(e.pointerId, { x, y, isDown: true, isPointer: true });
+      if (e.cancelable) e.preventDefault();
+    }
+
+    function handleMusicPointerUp(e) {
+      if (activePointers.has(e.pointerId)) {
+        const pKey = `ptr_${e.pointerId}`;
+        for (const [k, v] of activeFingerTouches.entries()) {
+          if (k.includes(pKey)) activeFingerTouches.set(k, false);
+        }
+        activePointers.delete(e.pointerId);
+      }
+    }
+
+    window.addEventListener("pointerdown", handleMusicPointerDown, { passive: false });
+    window.addEventListener("pointermove", handleMusicPointerMove, { passive: false });
+    window.addEventListener("pointerup", handleMusicPointerUp, { passive: true });
+    window.addEventListener("pointercancel", handleMusicPointerUp, { passive: true });
 
     // 1. Polyphonic Piano Synthesizer
     function playPianoNote(freq, velocity = 0.8) {
@@ -3563,9 +4202,67 @@
       }
     }
 
+// 3. Acoustic Air Guitar Synthesizer (6 strings, physical harmonic ringout)
+    const GUITAR_BASE_FREQS = [82.41, 110.00, 146.83, 196.00, 246.94, 329.63]; // E2, A2, D3, G3, B3, E4
+    const GUITAR_STRING_NAMES = ["E2", "A2", "D3", "G3", "B3", "E4"];
+    const GUITAR_CHORDS = {
+      "OPEN": { name: "OPEN", frets: [0, 0, 0, 0, 0, 0] },
+      "EM":   { name: "Em",   frets: [0, 2, 2, 0, 0, 0] },
+      "G":    { name: "G",    frets: [3, 2, 0, 0, 3, 3] },
+      "C":    { name: "C",    frets: [-1, 3, 2, 0, 1, 0] },
+      "D":    { name: "D",    frets: [-1, -1, 0, 2, 3, 2] },
+      "AM":   { name: "Am",   frets: [-1, 0, 2, 2, 1, 0] },
+      "F":    { name: "F",    frets: [1, 3, 3, 2, 1, 1] }
+    };
+
+    function playGuitarPluck(stringIdx, fret = 0, velocity = 1.0) {
+      if (state.soundEnabled === false || fret < 0) return;
+      try {
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        const now = audioCtx.currentTime;
+        const baseFreq = GUITAR_BASE_FREQS[stringIdx] || 110.0;
+        const freq = baseFreq * Math.pow(2, fret / 12);
+        const dur = 1.2 + (5 - stringIdx) * 0.25;
+
+        const osc1 = audioCtx.createOscillator();
+        const osc2 = audioCtx.createOscillator();
+        const filter = audioCtx.createBiquadFilter();
+        const gain = audioCtx.createGain();
+
+        osc1.type = "triangle";
+        osc1.frequency.setValueAtTime(freq, now);
+
+        osc2.type = "sawtooth";
+        osc2.frequency.setValueAtTime(freq * 1.002, now);
+
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(Math.min(8000, freq * 8), now);
+        filter.frequency.exponentialRampToValueAtTime(Math.min(3000, freq * 1.8), now + 0.35);
+        filter.Q.value = 3.5;
+
+        const vol = Math.min(0.55, 0.38 * velocity);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(vol, now + 0.004);
+        gain.gain.exponentialRampToValueAtTime(vol * 0.6, now + 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+        osc1.connect(filter);
+        osc2.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + dur);
+        osc2.stop(now + dur);
+      } catch (e) {
+        console.warn("Guitar audio error:", e);
+      }
+    }
+
     // 3. Main Air Music Draw Loop
     function drawMusic(w, h) {
-      badge("AIR MUSIC · tap keys with fingertips · strike drum pads · polyphonic synthesizers");
+      badge("AIR MUSIC · play with fingers, mouse or touch · polyphonic synthesizers");
       const c = vCtx;
       const instrument = state.instrument || "PIANO";
       const showPiano = instrument === "PIANO" || instrument === "DUAL";
@@ -3582,10 +4279,23 @@
               x: pt.x,
               y: pt.y,
               handIdx,
-              tipIdx
+              tipIdx,
+              isPointer: false
             });
           });
         });
+      }
+
+      // Collect all active mouse clicks & touchscreen touches
+      for (const [ptrId, ptr] of activePointers.entries()) {
+        if (ptr.isDown) {
+          fingertips.push({
+            id: `ptr_${ptrId}`,
+            x: ptr.x,
+            y: ptr.y,
+            isPointer: true
+          });
+        }
       }
 
       // ----------------------------------------------------
@@ -3673,23 +4383,31 @@
       // B. PIANO KEYBOARD RENDERING & KEY PRESS COLLISION
       // ----------------------------------------------------
       if (showPiano) {
-        const whiteNotes = ["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5"];
+        const baseOct = 4 + (state.octaveOffset || 0);
+        const nextOct = baseOct + 1;
+        const whiteNotes = [`C${baseOct}`, `D${baseOct}`, `E${baseOct}`, `F${baseOct}`, `G${baseOct}`, `A${baseOct}`, `B${baseOct}`, `C${nextOct}`, `D${nextOct}`, `E${nextOct}`];
         const whiteFreqs = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25, 587.33, 659.25];
 
         const blackNoteMap = [
-          { idx: 0, note: "C#4", freq: 277.18 },
-          { idx: 1, note: "D#4", freq: 311.13 },
-          { idx: 3, note: "F#4", freq: 369.99 },
-          { idx: 4, note: "G#4", freq: 415.30 },
-          { idx: 5, note: "A#4", freq: 466.16 },
-          { idx: 7, note: "C#5", freq: 554.37 },
-          { idx: 8, note: "D#5", freq: 622.25 }
+          { idx: 0, note: `C#${baseOct}`, freq: 277.18 },
+          { idx: 1, note: `D#${baseOct}`, freq: 311.13 },
+          { idx: 3, note: `F#${baseOct}`, freq: 369.99 },
+          { idx: 4, note: `G#${baseOct}`, freq: 415.30 },
+          { idx: 5, note: `A#${baseOct}`, freq: 466.16 },
+          { idx: 7, note: `C#${nextOct}`, freq: 554.37 },
+          { idx: 8, note: `D#${nextOct}`, freq: 622.25 }
         ];
 
         const octMult = Math.pow(2, state.octaveOffset || 0);
 
-        const kbY = instrument === "DUAL" ? h * 0.70 : h * 0.62;
-        const kbH = instrument === "DUAL" ? h * 0.26 : h * 0.34;
+        let kbY;
+        if (instrument === "DUAL") {
+          kbY = h * 0.68;
+        } else {
+          const lvl = state.pianoLevel || "FLOATING";
+          kbY = lvl === "LOW" ? h * 0.62 : (lvl === "HIGH" ? h * 0.30 : h * 0.44);
+        }
+        const kbH = instrument === "DUAL" ? h * 0.26 : h * 0.35;
         const numWhite = whiteNotes.length;
         const whiteW = w / numWhite;
         const blackW = whiteW * 0.58;
@@ -3849,6 +4567,144 @@
         c.restore();
       }
 
+      // ----------------------------------------------------
+      // C. AIR GUITAR RENDERING & STRUM COLLISION
+      // ----------------------------------------------------
+      if (instrument === "GUITAR") {
+        const chordKeys = Object.keys(GUITAR_CHORDS);
+        const activeChordKey = state.activeGuitarChord || "OPEN";
+        const curChord = GUITAR_CHORDS[activeChordKey] || GUITAR_CHORDS["OPEN"];
+
+        // 1. Left Fretboard Chord Selector Zone
+        const chordPanelW = Math.min(180, w * 0.22);
+        const chordBtnH = 34;
+        const chordStartY = h * 0.36;
+
+        c.save();
+        c.fillStyle = "rgba(10, 14, 23, 0.82)";
+        c.strokeStyle = "rgba(56, 189, 248, 0.35)";
+        c.lineWidth = 1;
+        c.beginPath();
+        c.roundRect(12, chordStartY - 10, chordPanelW, chordKeys.length * (chordBtnH + 6) + 16, 10);
+        c.fill();
+        c.stroke();
+
+        chordKeys.forEach((ck, ci) => {
+          const cy = chordStartY + ci * (chordBtnH + 6);
+          const isAct = ck === activeChordKey;
+          c.fillStyle = isAct ? "rgba(56, 189, 248, 0.28)" : "rgba(255, 255, 255, 0.04)";
+          c.strokeStyle = isAct ? "#38bdf8" : "rgba(255, 255, 255, 0.12)";
+          c.lineWidth = isAct ? 1.5 : 1;
+          c.beginPath();
+          c.roundRect(18, cy, chordPanelW - 12, chordBtnH, 6);
+          c.fill();
+          c.stroke();
+
+          c.font = "700 12px system-ui, -apple-system, sans-serif";
+          c.fillStyle = isAct ? "#ffffff" : "#94a3b8";
+          c.textAlign = "center";
+          c.textBaseline = "middle";
+          c.fillText(GUITAR_CHORDS[ck].name, 18 + (chordPanelW - 12) / 2, cy + chordBtnH / 2);
+
+          fingertips.forEach(ft => {
+            if (ft.x >= 18 && ft.x <= 18 + chordPanelW - 12 && ft.y >= cy && ft.y <= cy + chordBtnH) {
+              if (state.activeGuitarChord !== ck) {
+                state.activeGuitarChord = ck;
+                playAudioTone(440, "sine", 0.04, 0.1);
+                badge(`AIR GUITAR · CHORD ${GUITAR_CHORDS[ck].name}`);
+              }
+            }
+          });
+        });
+        c.restore();
+
+        // 2. 6 Horizontal Glowing Guitar Strings
+        const strLeft = chordPanelW + 28;
+        const strRight = w - 20;
+        const strW = strRight - strLeft;
+        const strSpacing = (h * 0.38) / 5;
+        const strTopY = h * 0.38;
+
+        if (!state.guitarStringVibrations) {
+          state.guitarStringVibrations = [0, 0, 0, 0, 0, 0].map(() => ({ amp: 0, lastPluck: 0 }));
+        }
+
+        const stringColors = ["#f59e0b", "#fbbf24", "#38bdf8", "#818cf8", "#a855f7", "#ec4899"];
+
+        for (let sIdx = 0; sIdx < 6; sIdx++) {
+          const stringY = strTopY + sIdx * strSpacing;
+          const vib = state.guitarStringVibrations[sIdx];
+          const fretOffset = curChord.frets[sIdx];
+          const isMuted = fretOffset < 0;
+
+          // Check collisions with fingertips & pointers
+          fingertips.forEach(ft => {
+            if (ft.x >= strLeft - 10 && ft.x <= strRight + 10) {
+              const dy = Math.abs(ft.y - stringY);
+              const touchKey = `gtr_${ft.id}_${sIdx}`;
+              if (dy < 14) {
+                if (!activeFingerTouches.get(touchKey) && (nowMs - vib.lastPluck > 90)) {
+                  activeFingerTouches.set(touchKey, true);
+                  vib.lastPluck = nowMs;
+                  vib.amp = 16.0;
+
+                  if (!isMuted) {
+                    playGuitarPluck(sIdx, fretOffset);
+                    badge(`AIR GUITAR · ${GUITAR_CHORDS[activeChordKey].name} · STRING ${GUITAR_STRING_NAMES[sIdx]}`);
+                    musicRipples.push({
+                      x: ft.x,
+                      y: stringY,
+                      color: stringColors[sIdx],
+                      radius: 8,
+                      maxRadius: 36,
+                      alpha: 0.95
+                    });
+                  }
+                }
+              } else {
+                activeFingerTouches.set(touchKey, false);
+              }
+            }
+          });
+
+          const dt = (nowMs - vib.lastPluck) / 1000;
+          const curAmp = Math.max(0, vib.amp * Math.exp(-dt * 4.5));
+          const strThickness = 3.5 - sIdx * 0.45;
+
+          c.save();
+          c.lineWidth = strThickness;
+          c.strokeStyle = isMuted ? "rgba(100, 116, 139, 0.4)" : stringColors[sIdx];
+          c.shadowColor = isMuted ? "transparent" : stringColors[sIdx];
+          c.shadowBlur = curAmp > 1 ? 12 : 3;
+
+          c.beginPath();
+          if (curAmp > 0.5) {
+            const steps = 32;
+            for (let i = 0; i <= steps; i++) {
+              const u = i / steps;
+              const px = strLeft + u * strW;
+              const envelope = Math.sin(u * Math.PI);
+              const wave = Math.sin(u * Math.PI * 2 + nowMs * 0.05) * curAmp * envelope;
+              const py = stringY + wave;
+              i === 0 ? c.moveTo(px, py) : c.lineTo(px, py);
+            }
+          } else {
+            c.moveTo(strLeft, stringY);
+            c.lineTo(strRight, stringY);
+          }
+          c.stroke();
+
+          // String Note Badge / Tag
+          c.font = "600 11px system-ui, -apple-system, sans-serif";
+          c.fillStyle = isMuted ? "#64748b" : "#f1f5f9";
+          c.textAlign = "right";
+          c.textBaseline = "middle";
+          const noteLabel = isMuted ? "X" : (fretOffset > 0 ? `${GUITAR_STRING_NAMES[sIdx]}+${fretOffset}` : GUITAR_STRING_NAMES[sIdx]);
+          c.fillText(noteLabel, strLeft - 8, stringY);
+          c.restore();
+        }
+      }
+
       // Draw Glowing Halos on all active fingertips
       fingertips.forEach(ft => {
         c.save();
@@ -3872,11 +4728,31 @@
       });
     });
 
+    const btnMusicLevel = document.getElementById("btn-music-level");
+    if (btnMusicLevel) {
+      btnMusicLevel.addEventListener("click", () => {
+        if (!state.pianoLevel || state.pianoLevel === "FLOATING") {
+          state.pianoLevel = "LOW";
+          btnMusicLevel.textContent = "Position: Desk";
+        } else if (state.pianoLevel === "LOW") {
+          state.pianoLevel = "HIGH";
+          btnMusicLevel.textContent = "Position: High";
+        } else {
+          state.pianoLevel = "FLOATING";
+          btnMusicLevel.textContent = "Position: Floating";
+        }
+        const sb = document.getElementById("status-badge");
+        if (sb) sb.textContent = `AIR MUSIC: ${state.instrument || "PIANO"} (${state.pianoLevel})`;
+      });
+    }
+
     const btnMusicOctave = document.getElementById("btn-music-octave");
     if (btnMusicOctave) {
       btnMusicOctave.addEventListener("click", () => {
-        state.octaveOffset = state.octaveOffset === 0 ? 1 : 0;
-        btnMusicOctave.textContent = state.octaveOffset === 0 ? "Octave: C4–E5" : "Octave: C5–E6";
+        state.octaveOffset = state.octaveOffset === 0 ? 1 : (state.octaveOffset === 1 ? -1 : 0);
+        const curBase = 4 + state.octaveOffset;
+        btnMusicOctave.textContent = `Octave: C${curBase}–E${curBase + 1}`;
+        badge(`AIR PIANO · OCTAVE C${curBase}–E${curBase + 1}`);
       });
     }
 
@@ -3992,6 +4868,7 @@
 
     function startTour() {
       currentTourStep = 0;
+      try { localStorage.setItem("divya_tour_completed", "true"); } catch (e) {}
       if (tourOverlay) {
         tourOverlay.style.display = "block";
         setTimeout(updateTourCard, 60);
@@ -4030,6 +4907,48 @@
       });
     }
 
+    const btnCheckUpdate = document.getElementById("btn-check-update");
+    const updateStatus = document.getElementById("update-status");
+    if (btnCheckUpdate) {
+      btnCheckUpdate.addEventListener("click", async () => {
+        playAudioTone(880, "triangle", 0.08, 0.2);
+        if (updateStatus) updateStatus.textContent = "Checking network...";
+        badge("CHECKING FOR UPDATES...");
+
+        if ("serviceWorker" in navigator) {
+          try {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) {
+              await reg.update();
+              if (reg.waiting) {
+                if (updateStatus) updateStatus.textContent = "Reloading new version...";
+                badge("NEW UPDATE READY · RELOADING");
+                reg.waiting.postMessage({ type: "SKIP_WAITING" });
+                setTimeout(() => window.location.reload(), 600);
+                return;
+              }
+            }
+          } catch (e) {
+            console.warn("SW update check error:", e);
+          }
+        }
+
+        try {
+          const res = await fetch("./index.html?nocache=" + Date.now(), { cache: "no-store" });
+          if (res.ok) {
+            if (updateStatus) updateStatus.textContent = "Up to date · Git Synced";
+            badge("APP IS UP TO DATE");
+          } else {
+            if (updateStatus) updateStatus.textContent = "Offline Mode (Cached)";
+            badge("OFFLINE MODE · CACHED");
+          }
+        } catch (e) {
+          if (updateStatus) updateStatus.textContent = "Offline Mode (Cached)";
+          badge("OFFLINE READY");
+        }
+      });
+    }
+
     // Auto-launch on first visit after entering studio
     const origEnterBtn = document.getElementById("btn-enter");
     if (origEnterBtn) {
@@ -4037,6 +4956,7 @@
         let done = false;
         try { done = localStorage.getItem("divya_tour_completed") === "true"; } catch (e) {}
         if (!done) {
+          try { localStorage.setItem("divya_tour_completed", "true"); } catch (e) {}
           setTimeout(() => startTour(), 600);
         }
       });

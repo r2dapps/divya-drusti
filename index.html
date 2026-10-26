@@ -107,7 +107,7 @@
     })();
   </script>
   <!-- Main Application Stylesheet -->
-  <link rel="stylesheet" href="css/app.css?v=11">
+  <link rel="stylesheet" href="css/app.css?v=12">
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
 <body>
@@ -133,7 +133,7 @@
 
         <div class="top-actions interactive">
           <button id="btn-camera-flip" class="btn-icon active" title="Toggle Mirror View">
-            <svg viewBox="0 0 24 24"><path d="M8 7h12m0 0l-4-4m4 4l-4 4m-8 6H4m0 0l4 4m-4-4l4-4"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 3v18M16 7l5 5-5 5V7zM8 7L3 12l5 5V7z"/></svg>
           </button>
           <button id="btn-camera-swap" class="btn-icon" title="Switch Camera Device">
             <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -170,6 +170,11 @@
 
         <!-- Scene 1: Spatial Prism Shader Dock -->
         <div id="prism-dock" class="dock-container interactive">
+          <div class="dock-controls-group">
+            <button class="filter-tab nav-btn" id="btn-prism-prev" title="Previous Filter (or Swipe / Head Turn Left)">&larr; Prev</button>
+            <button class="filter-tab nav-btn" id="btn-prism-next" title="Next Filter (or Swipe / Head Turn Right)">Next &rarr;</button>
+            <button class="filter-tab action-btn" id="btn-prism-lock" title="Lock Spatial Prism Quad Geometry">Lock Quad</button>
+          </div>
           <button class="filter-tab active" data-filter="SPECTRAL_PRISM">Spectral Prism</button>
           <button class="filter-tab" data-filter="HOLO_FABRIC">Bendy Fabric</button>
           <button class="filter-tab" data-filter="LIQUID_BUBBLE">Liquid Bubble</button>
@@ -200,6 +205,9 @@
             <div class="swatch" style="background: #169b62;" data-hair="emerald" title="Emerald"></div>
             <div class="swatch" style="background: #2b0612;" data-hair="cherry" title="Cherry Cola"></div>
             <div class="swatch" style="background: #d5dae4;" data-hair="platinum" title="Platinum Silver"></div>
+            <label class="custom-color-label" title="Custom Hair Color">
+              <input type="color" id="picker-hair-color" value="#c9808b" class="color-picker-input">
+            </label>
           </div>
           <div class="swatch-group">
             <span class="swatch-label">Lips:</span>
@@ -209,6 +217,21 @@
             <div class="swatch" style="background: #701a75;" data-lip="#701a75" title="Plum Wine"></div>
             <div class="swatch" style="background: #ea580c;" data-lip="#ea580c" title="Spiced Terra"></div>
             <div class="swatch" style="background: #d946ef;" data-lip="#d946ef" title="Orchid Gloss"></div>
+            <label class="custom-color-label" title="Custom Lip Color">
+              <input type="color" id="picker-lip-color" value="#e11d48" class="color-picker-input">
+            </label>
+          </div>
+          <div class="swatch-group">
+            <span class="swatch-label">Blush:</span>
+            <div class="swatch none active" data-blush="none" title="No Blush"></div>
+            <div class="swatch" style="background: #fb923c;" data-blush="#fb923c" title="Peach Bloom"></div>
+            <div class="swatch" style="background: #f43f5e;" data-blush="#f43f5e" title="Petal Rose"></div>
+            <div class="swatch" style="background: #f87171;" data-blush="#f87171" title="Warm Coral"></div>
+            <div class="swatch" style="background: #be185d;" data-blush="#be185d" title="Berry Wine"></div>
+            <div class="swatch" style="background: #f59e0b;" data-blush="#f59e0b" title="Golden Sunset"></div>
+            <label class="custom-color-label" title="Custom Cheek Blush">
+              <input type="color" id="picker-blush-color" value="#f43f5e" class="color-picker-input">
+            </label>
           </div>
         </div>
 
@@ -255,7 +278,9 @@
         <div id="music-dock" class="dock-container interactive" style="display: none;">
           <button class="filter-tab active" data-instrument="PIANO">Air Piano</button>
           <button class="filter-tab" data-instrument="DRUMS">Air Drums</button>
+          <button class="filter-tab" data-instrument="GUITAR">Air Guitar</button>
           <button class="filter-tab" data-instrument="DUAL">Piano &amp; Drums</button>
+          <button class="filter-tab" id="btn-music-level" title="Adjust Piano Floating Elevation">Position: Floating</button>
           <button class="filter-tab" id="btn-music-octave">Octave: C4–E5</button>
           <button class="filter-tab" id="btn-music-clear">Clear Ripples</button>
         </div>
@@ -333,6 +358,14 @@
 
         <div class="slider-row">
           <div class="slider-info">
+            <span>Cheek Blush Opacity</span>
+            <span id="val-blush-opacity">65%</span>
+          </div>
+          <input type="range" id="slider-blush-opacity" min="10" max="100" value="65">
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-info">
             <span>Plexus Proximity Radius</span>
             <span id="val-plexus-radius">65px</span>
           </div>
@@ -390,6 +423,13 @@
       <div class="settings-group">
         <button id="btn-show-instructions" class="switch-btn" style="padding: 10px; text-align: center;">View Instructions</button>
         <button id="btn-restart-tour" class="switch-btn" style="padding: 10px; text-align: center; border-color: rgba(56, 189, 248, 0.4); color: #38bdf8;">Interactive Tour</button>
+        <div class="toggle-row" id="row-update" style="margin-top: 6px;">
+          <div style="display:flex; flex-direction:column; gap:2px;">
+            <span>Update / Git Sync</span>
+            <span id="update-status" style="font-size: 10px; color: var(--text-muted);">Offline Ready · v1.2</span>
+          </div>
+          <button id="btn-check-update" class="switch-btn" title="Check for updates from Git">CHECK</button>
+        </div>
       </div>
     </div>
 
@@ -536,6 +576,6 @@
     </div>
 
   <!-- MediaPipe Tasks Vision & Application Logic -->
-  <script type="module" src="js/app.js?v=11"></script>
+  <script type="module" src="js/app.js?v=12"></script>
 </body>
 </html>

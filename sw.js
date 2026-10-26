@@ -1,11 +1,11 @@
 // DIVYA service worker - app shell + runtime cache for MediaPipe (CDN + models) so it works offline after first load
-const VERSION = "divya-v11";
+const VERSION = "divya-v12";
 const SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./css/app.css?v=11",
-  "./js/app.js?v=11",
+  "./css/app.css?v=12",
+  "./js/app.js?v=12",
   "./icons/icon-192.png",
   "./icons/icon-512.png"
 ];
@@ -84,4 +84,10 @@ self.addEventListener("fetch", e => {
         .catch(() => caches.match(req));
     })
   );
+});
+
+self.addEventListener("message", e => {
+  if (e.data && e.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
