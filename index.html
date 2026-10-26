@@ -107,7 +107,7 @@
     })();
   </script>
   <!-- Main Application Stylesheet -->
-  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/app.css?v=11">
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
 <body>
@@ -329,6 +329,13 @@
           </div>
           <input type="range" id="slider-plexus-radius" min="35" max="130" value="65">
         </div>
+        <div class="slider-row">
+          <div class="slider-info">
+            <span>Fish Flock Density</span>
+            <span id="val-flock-count">1200</span>
+          </div>
+          <input type="range" id="slider-flock-count" min="400" max="2400" step="50" value="1200">
+        </div>
 
         <div class="slider-row">
           <div class="slider-info">
@@ -367,13 +374,13 @@
       <div class="settings-group">
         <div class="section-label">Studio Tools</div>
         <div class="toggle-row"><span>Capture Photo</span><button id="btn-capture" class="switch-btn">SNAP</button></div>
-        <div class="toggle-row"><span>Pinch Shutter (3s Hold)</span><button id="toggle-gesture-shutter" class="switch-btn active">ON</button></div>
         <div class="toggle-row"><span>Fullscreen</span><button id="btn-fullscreen" class="switch-btn">GO</button></div>
         <div class="toggle-row" id="row-install" style="display:none"><span>Install App</span><button id="btn-install" class="switch-btn">INSTALL</button></div>
       </div>
 
       <div class="settings-group">
         <button id="btn-show-instructions" class="switch-btn" style="padding: 10px; text-align: center;">View Instructions</button>
+        <button id="btn-restart-tour" class="switch-btn" style="padding: 10px; text-align: center; border-color: rgba(56, 189, 248, 0.4); color: #38bdf8;">Interactive Tour</button>
       </div>
     </div>
 
@@ -430,9 +437,12 @@
 <!-- Onboarding Modal -->
     <div id="onboard-modal" class="onboard-modal">
       <div class="modal-card">
-        <div class="modal-head">
-          <div class="modal-title">DIVYA // दिव्य</div>
-          <div class="modal-tag">Puranic Spatial Vision Engine</div>
+        <div class="modal-head" style="display: flex; align-items: center; gap: 14px;">
+          <img src="icons/icon-192.png" alt="Divya Drusti Icon" width="48" height="48" style="border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.25); flex-shrink: 0; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);">
+          <div>
+            <div class="modal-title">DIVYA // दिव्य</div>
+            <div class="modal-tag">Puranic Spatial Vision Engine</div>
+          </div>
         </div>
 
         <div class="instruction-steps">
@@ -454,7 +464,7 @@
           </div>
           <div class="step-item">
             <span class="step-num">5</span>
-            <span><strong>Instant Photo Capture:</strong> Pinch index to thumb on either hand and hold steady for 3s to see the countdown ring and preview your shot! You can also tap Capture in the header or press Space / C anytime.</span>
+            <span><strong>Instant Photo Capture:</strong> Tap the Capture button in the header or press Space / C anytime to take a snapshot with preview and save options!</span>
           </div>
         </div>
 
@@ -490,7 +500,33 @@
       </div>
     </div>
 
+  
+    <!-- Interactive Spotlight Tour Overlay -->
+    <div id="tour-overlay" class="tour-overlay" style="display: none;" role="dialog" aria-modal="true" aria-label="Interactive Studio Tour">
+      <div id="tour-highlight" class="tour-highlight"></div>
+      <div id="tour-card" class="tour-card">
+        <div class="tour-header">
+          <span id="tour-step-badge" class="tour-badge">Step 1 of 4</span>
+          <button id="btn-tour-close" class="tour-close-btn" aria-label="Close tour">✕</button>
+        </div>
+        <div id="tour-title" class="tour-title">Modes &amp; Studio Workspaces</div>
+        <div id="tour-desc" class="tour-desc">Select Spatial Prism, AI Hair &amp; Makeup, Mystic Jutsu, Prana Catch Game, or 3D Avatar.</div>
+        <div class="tour-footer">
+          <div class="tour-dots">
+            <span class="tour-dot active" data-step="0"></span>
+            <span class="tour-dot" data-step="1"></span>
+            <span class="tour-dot" data-step="2"></span>
+            <span class="tour-dot" data-step="3"></span>
+          </div>
+          <div class="tour-buttons">
+            <button id="btn-tour-prev" class="btn-ghost" style="padding: 5px 12px; font-size: 11px;">Back</button>
+            <button id="btn-tour-next" class="btn-primary" style="padding: 5px 14px; font-size: 11px;">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   <!-- MediaPipe Tasks Vision & Application Logic -->
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=11"></script>
 </body>
 </html>

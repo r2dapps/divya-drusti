@@ -678,49 +678,7 @@
     }
 
     
-    function drawPinchCountdown(ctx, pos, progress) {
-      if (!pos) return;
-      const { x, y } = pos;
-      const r = 32;
-      const secondsLeft = Math.max(1, Math.ceil((1.0 - progress) * 3));
-
-      ctx.save();
-      // Frosted dark pill background
-      ctx.beginPath();
-      ctx.arc(x, y, r + 4, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(6, 7, 10, 0.72)";
-      ctx.fill();
-
-      // Track ring
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
-      ctx.lineWidth = 3.5;
-      ctx.stroke();
-
-      // Active progress arc (cyan / slate highlight)
-      const startAng = -Math.PI / 2;
-      const endAng = startAng + progress * Math.PI * 2;
-      ctx.beginPath();
-      ctx.arc(x, y, r, startAng, endAng);
-      ctx.strokeStyle = "rgba(56, 189, 248, 0.95)";
-      ctx.lineWidth = 3.5;
-      ctx.lineCap = "round";
-      ctx.stroke();
-
-      // Countdown number
-      ctx.font = '700 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
-      ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(secondsLeft.toString(), x, y);
-
-      // Text badge below
-      ctx.font = '600 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
-      ctx.fillStyle = "rgba(243, 245, 248, 0.92)";
-      ctx.fillText("HOLD TO SNAP", x, y + r + 15);
-      ctx.restore();
-    }
+    /* Pinch countdown removed per user request; capture strictly via on-screen buttons and Space/C */
 
     function render2DOverlays() {
       vCtx.clearRect(0, 0, vecCanvas.width, vecCanvas.height);
@@ -916,8 +874,7 @@
       }
       if (state.scene === "GAME") drawGame(w, h);
       if (state.showFaceMesh && !state.capture && state.faceLandmarks) drawFaceMesh();
-      if (!state.capture && state.pinchProgress > 0 && state.pinchPos) drawPinchCountdown(vCtx, state.pinchPos, state.pinchProgress);
-      if (state.shotFlash > 0) { vCtx.fillStyle = `rgba(255,255,255,${state.shotFlash * 0.6})`; vCtx.fillRect(0, 0, w, h); state.shotFlash -= 0.08; }
+            if (state.shotFlash > 0) { vCtx.fillStyle = `rgba(255,255,255,${state.shotFlash * 0.6})`; vCtx.fillRect(0, 0, w, h); state.shotFlash -= 0.08; }
     }
 
     /* ---------- shared helpers ---------- */
@@ -926,8 +883,8 @@
     const mkCanvas = document.createElement("canvas"), mkCtx = mkCanvas.getContext("2d");
     let prevHair = null, prevSkin = null, prevPerson = null;
     Object.assign(state, { trails: {}, lives: 3, streak: 0, level: 1, over: false, flash: 0, rings: [], headTrail: [],
-      maskDirty: false, capture: false, lastHandsTime: -1e9, prevActive: false, shutterArmed: false, gestureShutterEnabled: true, singlePinchSince: 0, pinchProgress: 0, pinchPos: null, lastSnapshotBlob: null, lastSnapshotUrl: null, pinchSince: 0, lastShot: -1e9, shotFlash: 0, zoom: 2.5, skinSmooth: 0.6, best: 0, gmode: "ARCADE", fbGood: true,
-      lipOpacity: 0.35, plexusRadius: 65, flockSpeed: 1.0, gameGalaxy: false });
+      maskDirty: false, capture: false, lastHandsTime: -1e9, prevActive: false, shutterArmed: false, lastSnapshotBlob: null, lastSnapshotUrl: null, pinchSince: 0, lastShot: -1e9, shotFlash: 0, zoom: 2.5, skinSmooth: 0.6, best: 0, gmode: "ARCADE", fbGood: true,
+      lipOpacity: 0.35, plexusRadius: 65, flockCount: 1200, flockSpeed: 1.0, gameGalaxy: false });
     try { state.best = +localStorage.getItem("divya_best") || 0; } catch (e) {}
     const badge = t => { const b = document.getElementById("status-badge"); if (b.textContent !== t) b.textContent = t; };
     function glow(c, x, y, r, a, b) {
@@ -1094,6 +1051,34 @@
         }
         if (live[k]) { const e = tr[tr.length - 1]; glow(c, e.x, e.y, 14, `hsla(${(t * 90 + off) % 360},100%,70%,0.8)`, "rgba(255,255,255,0)"); }
       }
+
+      // Two-hand harmonic energy ribbons connecting both hands
+      if (state.handData.length >= 2) {
+        const h1 = state.handData[0].landmarks;
+        const h2 = state.handData[1].landmarks;
+        [4, 8, 12, 16, 20].forEach((ti, idx) => {
+          const p1 = landmarkToScreen(h1[ti]);
+          const p2 = landmarkToScreen(h2[ti]);
+          const d = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+          if (d < 380) {
+            const alpha = Math.max(0, (1 - d / 380) * 0.72);
+            c.save();
+            c.strokeStyle = `hsla(${(t * 110 + idx * 45) % 360}, 100%, 72%, ${alpha})`;
+            c.lineWidth = 2.4;
+            c.beginPath();
+            const steps = 16;
+            for (let i = 0; i <= steps; i++) {
+              const u = i / steps;
+              const midWave = Math.sin(u * Math.PI * 3 + t * 4 + idx) * (22 * (1 - u) * u * 4);
+              const x = p1.x + (p2.x - p1.x) * u;
+              const y = p1.y + (p2.y - p1.y) * u + midWave;
+              i === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+            }
+            c.stroke();
+            c.restore();
+          }
+        });
+      }
     }
     /* ---------- MYSTIC 2.0: hand-scaled spells + Alchemy / 3D Point Cloud / Finger Text ---------- */
     // Per-hand measurements: palm, fingertips, openness (fist 0 -> open 1), roll angle, pinch ratio. span scales every spell to the hand.
@@ -1110,7 +1095,7 @@
       [[8, 6], [12, 10], [16, 14], [20, 18]].forEach(([t, k]) => { if (d(t, 0) > d(k, 0) * 1.15) n++; });
       return n + (d(4, 17) > d(3, 17) * 1.1 ? 1 : 0);
     }
-    const RUNES = "â˜‰â˜½â˜¿â™€â™‚â™ƒâ™„â™…â™†â™â˜Šâ˜‹";
+    const RUNES = ["☉", "☽", "☿", "♀", "♂", "♃", "♄", "♈", "♉", "♊", "♋", "♌"];
     function drawAlchemy(c, t) {
       const H = state.handData.map(handInfo);
       badge(H.length > 1 ? "ALCHEMY · hands apart = bigger circle · close fists to transmute" : "ALCHEMY · pinch wide = bigger circle · two hands = bind a circle");
@@ -1128,12 +1113,19 @@
       c.shadowColor = "#ffb020"; c.shadowBlur = 12; c.strokeStyle = "rgba(255,196,80,0.95)";
       [1, 0.82, 0.5].forEach((k, i) => { c.lineWidth = i ? 1.3 : 2.4; c.beginPath(); c.arc(0, 0, r * k, 0, TAU); c.stroke(); });
       c.font = `${Math.max(10, r * 0.13)}px serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#ffe9a8";
-      for (let i = 0; i < 12; i++) { c.save(); c.rotate(i * TAU / 12); c.translate(0, -r * 0.91); c.fillText(RUNES[i], 0, 0); c.restore(); }
+      for (let i = 0; i < 12; i++) { c.save(); c.rotate(i * TAU / 12); c.translate(0, -r * 0.91); c.fillText(RUNES[i % RUNES.length], 0, 0); c.restore(); }
       c.strokeStyle = "#ffe9a8"; c.lineWidth = 1.6;
       c.save(); c.rotate(-t * 0.6); star(c, 3, r * 0.8, 1); c.rotate(Math.PI); star(c, 3, r * 0.8, 1); c.restore();
       c.save(); c.rotate(t * 0.9); star(c, 4, r * 0.5, 1); c.restore();
       c.restore();
       H.forEach(q => q.tips.forEach(tp => { c.strokeStyle = "rgba(255,200,90,0.35)"; c.lineWidth = 1.2; strokePts(c, bolt(tp.x, tp.y, p.x, p.y, r * 0.15, 3)); }));
+      if (H.length > 1) {
+        // Transmutation binding arc between both palms
+        c.strokeStyle = "rgba(255, 220, 110, 0.75)";
+        c.lineWidth = 2.2;
+        strokePts(c, bolt(H[0].palm.x, H[0].palm.y, H[1].palm.x, H[1].palm.y, r * 0.22, 4));
+        glow(c, p.x, p.y, r * 0.35 * (0.8 + e), "rgba(255, 235, 170, 0.9)", "rgba(255, 170, 40, 0)");
+      }
       glow(c, p.x, p.y, r * 0.18 * (0.6 + e), "rgba(255,255,255,0.95)", "rgba(255,190,70,0)");
       if (Math.random() < 0.5 + e * 0.5) { const a = Math.random() * TAU; emit(p.x + Math.cos(a) * r, p.y + Math.sin(a) * r, Math.cos(a), -1.5 - Math.random() * 2, "#ffcf66", 2.2); }
     }
@@ -1217,22 +1209,19 @@
     /* Bioluminescent Boid Fish Swarm (Cosmic Schooling Particle Simulation):
        2,400 schooling micro-boids with aquatic tail undulation, vortex gravitation, and shockwave scatter */
     const flock = [];
-    const FLOCK_COUNT = 2200;
-
     function drawFlock(c, w, h, t) {
       badge("BIOLUMINESCENT SWARM · schooling fish swarm · pinch = orbital vortex · fist = shockwave scatter");
-      if (!flock.length) {
-        for (let i = 0; i < FLOCK_COUNT; i++) {
-          flock.push({
-            x: Math.random() * w,
-            y: Math.random() * h,
-            vx: (Math.random() - 0.5) * 2,
-            vy: (Math.random() - 0.5) * 2,
-            z: 0.5 + Math.random() * 0.9, // depth scale
-            phase: Math.random() * TAU,
-            id: i
-          });
-        }
+      const targetCount = Math.min(Math.max(state.flockCount || 1200, 200), 2400);
+      while (flock.length < targetCount) {
+        flock.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          vx: (Math.random() - 0.5) * 2,
+          vy: (Math.random() - 0.5) * 2,
+          z: 0.5 + Math.random() * 0.9,
+          phase: Math.random() * TAU,
+          id: flock.length
+        });
       }
 
       const attractors = [];
@@ -1259,7 +1248,7 @@
       c.globalCompositeOperation = "lighter";
       c.lineCap = "round";
 
-      for (let i = 0; i < FLOCK_COUNT; i++) {
+      for (let i = 0; i < targetCount; i++) {
         const b = flock[i];
         const z = b.z;
 
@@ -1621,15 +1610,184 @@
       else if (state.spell === "FEEDBACK") drawFeedback(c, w, h, t);
       else if (state.spell === "FLOCK") drawFlock(c, w, h, t);
       else if (state.spell === "PLEXUS") drawProximityPOP(c, w, h, t);
-      else state.handData.forEach(hd => {
-        const q = handInfo(hd);
-        c.save(); c.globalCompositeOperation = "lighter";
-        if (state.spell === "SHIELD") shield(c, q.palm, q.span, t + q.ang);
-        else if (state.spell === "CHIDORI") chidori(c, q.palm, q.span, q.tips);
-        else if (state.spell === "RASENGAN") rasengan(c, q.palm, q.span, t);
-        else portal(c, q.palm, q.span, t);
-        c.restore();
-      });
+      else {
+        state.handData.forEach(hd => {
+          const q = handInfo(hd);
+          c.save(); c.globalCompositeOperation = "lighter";
+          if (state.spell === "SHIELD") shield(c, q.palm, q.span, t + q.ang);
+          else if (state.spell === "CHIDORI") chidori(c, q.palm, q.span, q.tips);
+          else if (state.spell === "RASENGAN") rasengan(c, q.palm, q.span, t);
+          else portal(c, q.palm, q.span, t);
+          c.restore();
+        });
+
+        // Two-hand dynamic interaction: energy bridge connecting both hands with proximity fusion
+        if (state.handData.length >= 2) {
+          const q1 = handInfo(state.handData[0]);
+          const q2 = handInfo(state.handData[1]);
+          const p1 = q1.palm, p2 = q2.palm;
+          const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+          const midX = (p1.x + p2.x) * 0.5;
+          const midY = (p1.y + p2.y) * 0.5;
+          const isClash = dist < 180; // Proximity threshold for fusion / clash state
+
+          if (state.spell === "CHIDORI") {
+            c.save();
+            if (isClash) {
+              // CHIDORI CLASH: Blinding plasma explosion sphere with branching discharge
+              const clashRatio = Math.max(0, 1 - dist / 180);
+              glow(c, midX, midY, 60 + clashRatio * 50, "rgba(255, 255, 255, 0.95)", "rgba(96, 165, 250, 0)");
+              c.strokeStyle = "rgba(255, 255, 255, 0.98)";
+              c.lineWidth = 3.5;
+              c.shadowColor = "#93c5fd";
+              c.shadowBlur = 24;
+              strokePts(c, bolt(p1.x, p1.y, p2.x, p2.y, 45, 5));
+              // Omnidirectional lightning bursts
+              for (let i = 0; i < 4; i++) {
+                const a = (i * Math.PI) / 2 + t * 4;
+                const bx = midX + Math.cos(a) * (70 + clashRatio * 40);
+                const by = midY + Math.sin(a) * (70 + clashRatio * 40);
+                strokePts(c, bolt(midX, midY, bx, by, 35, 4));
+              }
+              for (let i = 0; i < 2; i++) {
+                emit(midX + (Math.random() - 0.5) * 30, midY + (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, "#ffffff", 3.5);
+              }
+            } else {
+              // High-voltage lightning bridge connecting palms and index fingertips
+              c.strokeStyle = "rgba(147, 197, 253, 0.95)";
+              c.lineWidth = 3;
+              c.shadowColor = "#60a5fa";
+              c.shadowBlur = 16;
+              strokePts(c, bolt(p1.x, p1.y, p2.x, p2.y, Math.min(dist * 0.35, 60), 4));
+              if (q1.tips[1] && q2.tips[1]) {
+                c.strokeStyle = "rgba(255, 255, 255, 0.9)";
+                c.lineWidth = 1.8;
+                strokePts(c, bolt(q1.tips[1].x, q1.tips[1].y, q2.tips[1].x, q2.tips[1].y, Math.min(dist * 0.25, 40), 3));
+              }
+              if (Math.random() < 0.4) {
+                emit(midX + (Math.random() - 0.5) * 20, midY + (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, "#93c5fd", 3);
+              }
+            }
+            c.restore();
+          } else if (state.spell === "SHIELD") {
+            c.save();
+            if (isClash) {
+              // AEGIS BULWARK FUSION: Massive fused shield wall with counter-rotating sacred geometry
+              const shieldR = Math.max(q1.span, q2.span) * 2.2;
+              glow(c, midX, midY, shieldR * 1.3, "rgba(251, 191, 36, 0.45)", "rgba(245, 158, 11, 0)");
+              c.translate(midX, midY);
+              c.shadowColor = "#f59e0b";
+              c.shadowBlur = 20;
+              c.strokeStyle = "rgba(254, 240, 138, 0.95)";
+              c.lineWidth = 3.2;
+              c.beginPath(); c.arc(0, 0, shieldR, 0, TAU); c.stroke();
+              c.lineWidth = 1.8;
+              c.save(); c.rotate(t * 1.2); star(c, 8, shieldR * 0.85, 3); c.restore();
+              c.save(); c.rotate(-t * 1.6); star(c, 12, shieldR * 0.55, 5); c.restore();
+              glow(c, 0, 0, shieldR * 0.25, "rgba(255, 255, 255, 0.95)", "rgba(251, 191, 36, 0)");
+              c.translate(-midX, -midY);
+              if (Math.random() < 0.7) {
+                const a = Math.random() * TAU;
+                emit(midX + Math.cos(a) * shieldR, midY + Math.sin(a) * shieldR, Math.cos(a) * 3, Math.sin(a) * 3, "#fde047", 3);
+              }
+            } else {
+              // Two-hand harmonic energy barrier bridging between shields
+              c.strokeStyle = "rgba(251, 191, 36, 0.85)";
+              c.lineWidth = 2.4;
+              c.shadowColor = "#f59e0b";
+              c.shadowBlur = 14;
+              c.beginPath();
+              c.moveTo(p1.x, p1.y);
+              const cpY = midY + Math.sin(t * 3) * 25;
+              c.quadraticCurveTo(midX, cpY, p2.x, p2.y);
+              c.stroke();
+              c.beginPath();
+              c.arc(midX, midY, Math.min(dist * 0.22, 48), 0, TAU);
+              c.strokeStyle = "rgba(245, 158, 11, 0.65)";
+              c.stroke();
+            }
+            c.restore();
+          } else if (state.spell === "RASENGAN") {
+            c.save();
+            if (isClash) {
+              // OODAMA CHAKRA VORTEX: Combined giant sphere with dense spinning orbital rings
+              const sphereR = Math.max(q1.span, q2.span) * 1.8;
+              glow(c, midX, midY, sphereR * 1.6, "rgba(56, 189, 248, 0.55)", "rgba(2, 132, 199, 0)");
+              c.shadowColor = "#38bdf8";
+              c.shadowBlur = 22;
+              c.lineWidth = 2.2;
+              for (let k = 0; k < 4; k++) {
+                c.strokeStyle = "rgba(186, 230, 253, 0.85)";
+                c.beginPath();
+                for (let u = 0; u <= 1; u += 0.02) {
+                  const a = (k * TAU) / 4 + u * 12 - t * 8;
+                  const rr = sphereR * (1 - u * 0.9);
+                  const x = midX + Math.cos(a) * rr;
+                  const y = midY + Math.sin(a) * rr * 0.7;
+                  u === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+                }
+                c.stroke();
+              }
+              glow(c, midX, midY, sphereR * 0.35, "rgba(255, 255, 255, 0.98)", "rgba(56, 189, 248, 0)");
+              for (let i = 0; i < 2; i++) {
+                const a = Math.random() * TAU;
+                emit(midX + Math.cos(a) * sphereR, midY + Math.sin(a) * sphereR, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, "#7dd3fc", 3);
+              }
+            } else {
+              // Dual-core spiral vortex linking both chakra spheres
+              c.strokeStyle = "rgba(56, 189, 248, 0.9)";
+              c.lineWidth = 2.2;
+              c.shadowColor = "#0284c7";
+              c.shadowBlur = 14;
+              const steps = 24;
+              c.beginPath();
+              for (let i = 0; i <= steps; i++) {
+                const u = i / steps;
+                const x = p1.x + (p2.x - p1.x) * u;
+                const y = p1.y + (p2.y - p1.y) * u + Math.sin(u * Math.PI * 4 + t * 5) * 18;
+                i === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+              }
+              c.stroke();
+            }
+            c.restore();
+          } else {
+            c.save();
+            if (isClash) {
+              // WORMHOLE COLLAPSE: Spiraling gravitational rift between sling rings
+              const portalR = Math.max(q1.span, q2.span) * 2.2;
+              glow(c, midX, midY, portalR * 1.4, "rgba(249, 115, 22, 0.6)", "rgba(194, 65, 12, 0)");
+              c.strokeStyle = "rgba(254, 215, 170, 0.95)";
+              c.lineWidth = 3;
+              c.shadowColor = "#ea580c";
+              c.shadowBlur = 20;
+              c.beginPath();
+              for (let u = 0; u <= 1; u += 0.02) {
+                const a = u * TAU * 3 + t * 4;
+                const r = portalR * (1 - u * 0.9);
+                const x = midX + Math.cos(a) * r;
+                const y = midY + Math.sin(a) * r;
+                u === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+              }
+              c.stroke();
+              for (let i = 0; i < 3; i++) {
+                const a = Math.random() * TAU;
+                emit(midX + Math.cos(a) * portalR, midY + Math.sin(a) * portalR, -Math.cos(a) * 4, -Math.sin(a) * 4, "#fb923c", 3.2);
+              }
+            } else {
+              // Dimensional wormhole bridge between sling portals
+              c.strokeStyle = "rgba(249, 115, 22, 0.85)";
+              c.lineWidth = 2.5;
+              c.shadowColor = "#ea580c";
+              c.shadowBlur = 16;
+              strokePts(c, bolt(p1.x, p1.y, p2.x, p2.y, Math.min(dist * 0.25, 45), 3));
+              if (Math.random() < 0.35) {
+                emit(midX, midY, (Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5, "#fb923c", 2.5);
+              }
+            }
+            c.restore();
+          }
+        }
+      }
       for (let i = state.portalSparks.length - 1; i >= 0; i--) {
         const s = state.portalSparks[i];
         s.x += s.vx; s.y += s.vy; s.vy += 0.04; s.life -= 0.03;
@@ -2275,8 +2433,8 @@
           return null;
         });
 
-        await enumerateCameras();
         await startWebcam();
+        await enumerateCameras();
       } catch (err) {
         console.warn("Camera fallback active:", err);
         state.hasCamera = false;
@@ -2294,7 +2452,36 @@
       }
     }
 
-    async function startWebcam(deviceId = null) {
+    /* Screen Wake Lock API (keeps screen active during AR studio sessions) */
+    let wakeLockSentinel = null;
+
+    async function requestWakeLock() {
+      if ("wakeLock" in navigator && !wakeLockSentinel) {
+        try {
+          wakeLockSentinel = await navigator.wakeLock.request("screen");
+          wakeLockSentinel.addEventListener("release", () => {
+            wakeLockSentinel = null;
+          });
+        } catch (err) {
+          wakeLockSentinel = null;
+        }
+      }
+    }
+
+    async function releaseWakeLock() {
+      if (wakeLockSentinel) {
+        try { await wakeLockSentinel.release(); } catch (e) {}
+        wakeLockSentinel = null;
+      }
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && state.hasCamera) {
+        requestWakeLock();
+      }
+    });
+
+    async function startWebcam(deviceId = null, facingMode = null) {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("getUserMedia unavailable");
       }
@@ -2303,10 +2490,15 @@
         video.srcObject.getTracks().forEach(t => t.stop());
       }
 
+      const prefFacing = facingMode || state.facingMode || "user";
+      state.facingMode = prefFacing;
+
+      const videoConstraints = deviceId
+        ? { deviceId: { exact: deviceId } }
+        : { width: { ideal: 1920, max: 1920 }, height: { ideal: 1080, max: 1080 }, facingMode: { ideal: prefFacing } };
+
       const constraints = {
-        video: deviceId
-          ? { deviceId: { exact: deviceId } }
-          : { width: { ideal: 1920, max: 1920 }, height: { ideal: 1080, max: 1080 }, facingMode: "user" },
+        video: videoConstraints,
         audio: false
       };
 
@@ -2322,6 +2514,23 @@
       state.hasCamera = true;
       statusIndicator.classList.remove("standby");
       fitViewport();
+
+      // Inspect active track settings to identify rear/back camera
+      const track = stream.getVideoTracks()[0];
+      if (track && track.getSettings) {
+        const settings = track.getSettings();
+        if (settings.facingMode) {
+          state.facingMode = settings.facingMode;
+          if (settings.facingMode === "environment") {
+            state.mirrorView = false;
+            const bcf = document.getElementById("btn-camera-flip");
+            if (bcf) bcf.classList.toggle("active", false);
+          }
+        }
+      }
+
+      // Keep screen awake while camera is actively streaming
+      requestWakeLock();
     }
 
     /* =========================================================================
@@ -2565,15 +2774,22 @@
     });
 
     // Sliders
-    function setupSlider(id, valId, key) {
+    function setupSlider(id, valId, key, options = {}) {
       const slider = document.getElementById(id);
       const valDisplay = document.getElementById(valId);
+      if (!slider || !valDisplay) return;
+
+      const unit = options.unit !== undefined ? options.unit : "%";
+      const divisor = options.divisor !== undefined ? options.divisor : 100.0;
 
       const update = () => {
-        const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
+        const val = parseFloat(slider.value);
+        const min = parseFloat(slider.min);
+        const max = parseFloat(slider.max);
+        const pct = Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
         slider.style.background = `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${pct}%, #232733 ${pct}%, #232733 100%)`;
-        valDisplay.textContent = `${slider.value}%`;
-        state[key] = slider.value / 100.0;
+        valDisplay.textContent = unit ? `${val}${unit}` : `${val}`;
+        state[key] = divisor === 1 ? val : val / divisor;
       };
 
       slider.addEventListener("input", update);
@@ -2586,6 +2802,10 @@
     setupSlider("slider-vibrance", "val-vibrance", "vibrance");
     setupSlider("slider-skin", "val-skin", "skinSmooth");
     setupSlider("slider-zoom", "val-zoom", "zoom");
+    setupSlider("slider-lip-opacity", "val-lip-opacity", "lipOpacity");
+    setupSlider("slider-plexus-radius", "val-plexus-radius", "plexusRadius", { unit: "px", divisor: 1 });
+    setupSlider("slider-flock-count", "val-flock-count", "flockCount", { unit: "", divisor: 1 });
+    setupSlider("slider-flock-speed", "val-flock-speed", "flockSpeed");
 
     // Camera & Audio Actions
     const btnCamFlip = document.getElementById("btn-camera-flip");
@@ -2601,14 +2821,51 @@
     });
 
     const btnCamSwap = document.getElementById("btn-camera-swap");
-    btnCamSwap.addEventListener("click", async () => {
+    async function switchCamera() {
       if (state.availableCameras.length <= 1) await enumerateCameras();
-      if (state.availableCameras.length > 0) {
+
+      let nextIsEnv = false;
+      if (state.availableCameras.length > 1) {
         state.currentCameraIndex = (state.currentCameraIndex + 1) % state.availableCameras.length;
         const target = state.availableCameras[state.currentCameraIndex];
-        try { await startWebcam(target.deviceId); } catch (e) { console.warn(e); }
+        const label = (target.label || "").toLowerCase();
+        nextIsEnv = label.includes("back") || label.includes("rear") || label.includes("environment");
+        try {
+          await startWebcam(target.deviceId, nextIsEnv ? "environment" : "user");
+        } catch (e) {
+          console.warn("Device ID switch failed, falling back to facingMode toggle:", e);
+          state.facingMode = state.facingMode === "user" ? "environment" : "user";
+          nextIsEnv = state.facingMode === "environment";
+          await startWebcam(null, state.facingMode);
+        }
+      } else {
+        // Toggle user <-> environment
+        state.facingMode = (state.facingMode === "environment") ? "user" : "environment";
+        nextIsEnv = state.facingMode === "environment";
+        try {
+          await startWebcam(null, state.facingMode);
+        } catch (e) {
+          console.warn("FacingMode switch failed:", e);
+        }
       }
-    });
+
+      // Automatically mirror front camera and un-mirror back camera
+      state.mirrorView = !nextIsEnv;
+      if (btnCamFlip) btnCamFlip.classList.toggle("active", state.mirrorView);
+
+      // Re-enumerate cameras in case labels were unlocked
+      await enumerateCameras();
+
+      // Show brief status feedback
+      const sb = document.getElementById("status-badge");
+      if (sb) {
+        const prevText = sb.textContent;
+        sb.textContent = nextIsEnv ? "CAMERA: REAR / ENVIRONMENT (MIRROR OFF)" : "CAMERA: FRONT / USER (MIRROR ON)";
+        sb.style.display = "block";
+        setTimeout(() => { sb.textContent = prevText; }, 2000);
+      }
+    }
+    btnCamSwap.addEventListener("click", switchCamera);
 
     // Drawer Toggles
     const settingsDrawer = document.getElementById("settings-drawer");
@@ -2762,39 +3019,7 @@
                   state.targetCorners.br.y = rightHand.sThumb.normY;
                 }
 
-                // SINGLE-HAND PINCH SHUTTER (Hold steady for 3.0s with on-screen progress ring)
-                const pinchingHands = state.handData.filter(h => h.isPinching);
-                const singlePinchActive = state.gestureShutterEnabled && pinchingHands.length === 1;
-
-                if (singlePinchActive) {
-                  const pH = pinchingHands[0];
-                  const px = pH.sMid.normX * W;
-                  const py = pH.sMid.normY * H;
-
-                  if (!state.singlePinchSince) {
-                    state.singlePinchSince = timeMs;
-                    state.singlePinchPos = { x: px, y: py };
-                  } else {
-                    state.singlePinchPos.x += (px - state.singlePinchPos.x) * 0.3;
-                    state.singlePinchPos.y += (py - state.singlePinchPos.y) * 0.3;
-                  }
-
-                  const elapsed = timeMs - state.singlePinchSince;
-                  state.pinchProgress = Math.min(1.0, elapsed / 3000);
-                  state.pinchPos = { ...state.singlePinchPos };
-
-                  if (elapsed >= 3000 && (timeMs - state.lastShot > 3500)) {
-                    state.capture = "gesture";
-                    state.lastShot = timeMs;
-                    state.singlePinchSince = 0;
-                    state.pinchProgress = 0;
-                    state.pinchPos = null;
-                  }
-                } else {
-                  state.singlePinchSince = 0;
-                  state.pinchProgress = 0;
-                  state.pinchPos = null;
-                }
+                // Pinch shutter removed: capture strictly via on-screen buttons and Space/C hotkeys
               }
 
             } else if (!state.prismLocked && timeMs - state.lastHandsTime > 550) {
@@ -3056,15 +3281,7 @@
       sb.style.display = "block"; sb.textContent = "EFFECT CAPTURED · PREVIEW READY";
       setTimeout(() => { sb.style.display = prevDisp; }, 1800);
     }
-    const toggleGestureShutter = document.getElementById("toggle-gesture-shutter");
-    if (toggleGestureShutter) {
-      toggleGestureShutter.addEventListener("click", () => {
-        state.gestureShutterEnabled = !state.gestureShutterEnabled;
-        toggleGestureShutter.textContent = state.gestureShutterEnabled ? "ON" : "OFF";
-        toggleGestureShutter.classList.toggle("active", state.gestureShutterEnabled);
-      });
-    }
-
+    
     
     const snapshotModal = document.getElementById("snapshot-modal");
     const btnSnapshotSave = document.getElementById("btn-snapshot-save");
@@ -3173,6 +3390,166 @@
       document.getElementById("row-install").style.display = "none";
       localStorage.setItem("divya_pwa_dismissed", "installed");
     });
+    
+    /* =========================================================================
+       SPOTLIGHT TOUR ENGINE (First-time walkthrough & Settings launchable)
+       ========================================================================= */
+    const TOUR_STEPS = [
+      {
+        target: ".scene-selector",
+        title: "Modes & Studio Workspaces",
+        desc: "Tap any tab to switch between Spatial Prism, AI Hair & Makeup, Mystic Jutsu, Prana Catch Game, or 3D Avatar.",
+        position: "top"
+      },
+      {
+        target: ".dock-container:not([style*='display: none'])",
+        fallbackTarget: "#prism-dock",
+        title: "Real-Time Effects & Shaders",
+        desc: "Swipe horizontally along the effects dock to choose from 17 real-time GPU shaders and Jutsu spells.",
+        position: "top"
+      },
+      {
+        target: "#viewport-frame",
+        title: "Touchless Spatial Gestures",
+        desc: "Dual-pinch thumbs and index fingers to shape the prism. Tap Capture in the header or press Space / C to take snapshots.",
+        position: "center"
+      },
+      {
+        target: "#btn-open-settings",
+        title: "Settings & Camera Controls",
+        desc: "Flip camera, toggle mirror, and open Settings for precision sliders, flock density, and tracking overlays.",
+        position: "bottom"
+      }
+    ];
+
+    let currentTourStep = 0;
+    const tourOverlay = document.getElementById("tour-overlay");
+    const tourHighlight = document.getElementById("tour-highlight");
+    const tourCard = document.getElementById("tour-card");
+    const tourStepBadge = document.getElementById("tour-step-badge");
+    const tourTitle = document.getElementById("tour-title");
+    const tourDesc = document.getElementById("tour-desc");
+    const btnTourPrev = document.getElementById("btn-tour-prev");
+    const btnTourNext = document.getElementById("btn-tour-next");
+    const btnTourClose = document.getElementById("btn-tour-close");
+    const btnRestartTour = document.getElementById("btn-restart-tour");
+
+    function updateTourCard() {
+      if (!tourOverlay || tourOverlay.style.display === "none") return;
+      const step = TOUR_STEPS[currentTourStep];
+      if (!step) return;
+
+      let el = document.querySelector(step.target);
+      if (!el && step.fallbackTarget) el = document.querySelector(step.fallbackTarget);
+      if (!el) el = document.getElementById("stage-container");
+
+      if (tourStepBadge) tourStepBadge.textContent = `Step ${currentTourStep + 1} of ${TOUR_STEPS.length}`;
+      if (tourTitle) tourTitle.textContent = step.title;
+      if (tourDesc) tourDesc.textContent = step.desc;
+
+      document.querySelectorAll(".tour-dot").forEach((dot, idx) => {
+        dot.classList.toggle("active", idx === currentTourStep);
+      });
+
+      if (btnTourPrev) btnTourPrev.style.display = currentTourStep === 0 ? "none" : "block";
+      if (btnTourNext) btnTourNext.textContent = currentTourStep === TOUR_STEPS.length - 1 ? "Finish" : "Next";
+
+      const rect = el.getBoundingClientRect();
+      const pad = 6;
+      const hlLeft = Math.max(0, rect.left - pad);
+      const hlTop = Math.max(0, rect.top - pad);
+      const hlWidth = rect.width + pad * 2;
+      const hlHeight = rect.height + pad * 2;
+
+      if (tourHighlight) {
+        tourHighlight.style.left = `${hlLeft}px`;
+        tourHighlight.style.top = `${hlTop}px`;
+        tourHighlight.style.width = `${hlWidth}px`;
+        tourHighlight.style.height = `${hlHeight}px`;
+      }
+
+      if (tourCard) {
+        const cardW = tourCard.offsetWidth || 320;
+        const cardH = tourCard.offsetHeight || 140;
+
+        if (step.position === "center") {
+          tourCard.style.left = "50%";
+          tourCard.style.top = "50%";
+          tourCard.style.transform = "translate(-50%, -50%)";
+        } else if (step.position === "top") {
+          const top = Math.max(16, rect.top - cardH - 14);
+          const left = Math.max(14, Math.min(window.innerWidth - cardW - 14, rect.left + rect.width / 2 - cardW / 2));
+          tourCard.style.left = `${left}px`;
+          tourCard.style.top = `${top}px`;
+          tourCard.style.transform = "none";
+        } else {
+          const top = Math.min(window.innerHeight - cardH - 16, rect.bottom + 14);
+          const left = Math.max(14, Math.min(window.innerWidth - cardW - 14, rect.right - cardW));
+          tourCard.style.left = `${left}px`;
+          tourCard.style.top = `${top}px`;
+          tourCard.style.transform = "none";
+        }
+      }
+    }
+
+    function startTour() {
+      currentTourStep = 0;
+      if (tourOverlay) {
+        tourOverlay.style.display = "block";
+        setTimeout(updateTourCard, 60);
+      }
+    }
+
+    function closeTour() {
+      if (tourOverlay) tourOverlay.style.display = "none";
+      try { localStorage.setItem("divya_tour_completed", "true"); } catch (e) {}
+    }
+
+    if (btnTourClose) btnTourClose.addEventListener("click", closeTour);
+    if (btnTourPrev) {
+      btnTourPrev.addEventListener("click", () => {
+        if (currentTourStep > 0) {
+          currentTourStep--;
+          updateTourCard();
+        }
+      });
+    }
+    if (btnTourNext) {
+      btnTourNext.addEventListener("click", () => {
+        if (currentTourStep < TOUR_STEPS.length - 1) {
+          currentTourStep++;
+          updateTourCard();
+        } else {
+          closeTour();
+        }
+      });
+    }
+    if (btnRestartTour) {
+      btnRestartTour.addEventListener("click", () => {
+        const sd = document.getElementById("settings-drawer");
+        if (sd) sd.classList.remove("open");
+        startTour();
+      });
+    }
+
+    // Auto-launch on first visit after entering studio
+    const origEnterBtn = document.getElementById("btn-enter");
+    if (origEnterBtn) {
+      origEnterBtn.addEventListener("click", () => {
+        let done = false;
+        try { done = localStorage.getItem("divya_tour_completed") === "true"; } catch (e) {}
+        if (!done) {
+          setTimeout(() => startTour(), 600);
+        }
+      });
+    }
+
+    window.addEventListener("resize", () => {
+      if (tourOverlay && tourOverlay.style.display !== "none") {
+        updateTourCard();
+      }
+    });
+
     if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
       navigator.serviceWorker.register("./sw.js").catch(() => {});
     }

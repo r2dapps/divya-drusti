@@ -1,11 +1,11 @@
 // DIVYA service worker - app shell + runtime cache for MediaPipe (CDN + models) so it works offline after first load
-const VERSION = "divya-v10";
+const VERSION = "divya-v11";
 const SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./css/app.css",
-  "./js/app.js",
+  "./css/app.css?v=11",
+  "./js/app.js?v=11",
   "./icons/icon-192.png",
   "./icons/icon-512.png"
 ];
