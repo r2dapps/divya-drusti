@@ -1192,25 +1192,109 @@
       c.restore();
     }
 
-    /* ---------- PRANA CATCH EDU: quiz modes (answers fall as orbs, catch the right one) ---------- */
+    /* ---------- PRANA CATCH EDU: curriculum quiz modes (answers fall as orbs, catch the right one) ---------- */
     const rnd = n => Math.floor(Math.random() * n), shuffle = a => a.map(v => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map(v => v[1]);
     const QBANK = {
-      CAPITALS: [["France","Paris"],["Japan","Tokyo"],["India","New Delhi"],["Brazil","BrasÃ­lia"],["Australia","Canberra"],["Canada","Ottawa"],["Egypt","Cairo"],["Kenya","Nairobi"],["Germany","Berlin"],["Italy","Rome"],["Spain","Madrid"],["Thailand","Bangkok"],["Turkey","Ankara"],["Argentina","Buenos Aires"],["Nepal","Kathmandu"],["Peru","Lima"],["Norway","Oslo"]].map(([a, b]) => [`Capital of ${a}?`, b]),
-      ELEMENTS: [["Gold","Au"],["Iron","Fe"],["Sodium","Na"],["Silver","Ag"],["Potassium","K"],["Lead","Pb"],["Helium","He"],["Copper","Cu"],["Oxygen","O"],["Carbon","C"],["Nitrogen","N"],["Calcium","Ca"],["Mercury","Hg"],["Tin","Sn"]].map(([a, b]) => [`Symbol for ${a}?`, b]),
-      SCIENCE: [["Largest planet?","Jupiter","Saturn|Mars"],["Plants absorb which gas?","COâ‚‚","Oâ‚‚|Nâ‚‚"],["Powerhouse of the cell?","Mitochondria","Nucleus|Ribosome"],["Water boils at (°C)?","100","90|120"],["Closest star to Earth?","The Sun","Sirius|Polaris"],["Force that pulls things down?","Gravity","Friction|Magnetism"],["The Red Planet?","Mars","Venus|Mercury"],["Chambers in a human heart?","4","2|3"],["Speed of light (km/s)?","300,000","30,000|3,000"],["Hardest natural material?","Diamond","Quartz|Iron"],["Bones in an adult body?","206","106|306"]]
+      CAPITALS: [
+        ["Capital of France?","Paris","Lyon|Marseille"],
+        ["Capital of Japan?","Tokyo","Kyoto|Osaka"],
+        ["Capital of India?","New Delhi","Mumbai|Kolkata"],
+        ["Capital of Brazil?","Brasilia","Rio de Janeiro|Sao Paulo"],
+        ["Capital of Australia?","Canberra","Sydney|Melbourne"],
+        ["Capital of Canada?","Ottawa","Toronto|Vancouver"],
+        ["Capital of Egypt?","Cairo","Alexandria|Giza"],
+        ["Capital of Kenya?","Nairobi","Mombasa|Kisumu"],
+        ["Capital of Germany?","Berlin","Munich|Frankfurt"],
+        ["Capital of Italy?","Rome","Milan|Naples"],
+        ["Capital of Spain?","Madrid","Barcelona|Valencia"],
+        ["Capital of Thailand?","Bangkok","Phuket|Chiang Mai"],
+        ["Capital of Turkey?","Ankara","Istanbul|Izmir"],
+        ["Capital of Argentina?","Buenos Aires","Cordoba|Rosario"],
+        ["Capital of Nepal?","Kathmandu","Pokhara|Lalitpur"],
+        ["Capital of Peru?","Lima","Cusco|Arequipa"],
+        ["Capital of Norway?","Oslo","Bergen|Trondheim"],
+        ["Capital of South Korea?","Seoul","Busan|Incheon"],
+        ["Capital of South Africa?","Pretoria","Cape Town|Johannesburg"]
+      ],
+      PHYSICS: [
+        ["SI unit of force?","Newton","Joule|Pascal"],
+        ["Speed of light in vacuum (km/s)?","300,000","30,000|3,000,000"],
+        ["First law of motion is also known as?","Law of Inertia","Law of Force|Law of Action"],
+        ["SI unit of electrical resistance?","Ohm","Volt|Ampere"],
+        ["Particles of light are called?","Photons","Electrons|Protons"],
+        ["Type of lens that converges light?","Convex","Concave|Cylindrical"],
+        ["Speed of sound in air (approx m/s)?","343","1500|3000"],
+        ["Bending of light as it passes mediums?","Refraction","Reflection|Diffraction"],
+        ["SI unit of frequency?","Hertz","Watt|Tesla"],
+        ["Energy of motion is called?","Kinetic","Potential|Thermal"],
+        ["Standard gravity on Earth (m/s²)?","9.8","6.7|12.4"],
+        ["Mirror used for wide rear view?","Convex","Concave|Plane"]
+      ],
+      CHEMISTRY: [
+        ["Chemical symbol for Gold?","Au","Ag|Fe"],
+        ["Chemical symbol for Iron?","Fe","Pb|Cu"],
+        ["Chemical symbol for Sodium?","Na","K|So"],
+        ["Chemical symbol for Silver?","Ag","Au|Al"],
+        ["Chemical symbol for Potassium?","K","P|Pt"],
+        ["Chemical symbol for Lead?","Pb","Pl|Ld"],
+        ["pH of pure water at 25°C?","7","0|14"],
+        ["Most abundant gas in atmosphere?","Nitrogen","Oxygen|Argon"],
+        ["Chemical formula for table salt?","NaCl","KCl|NaOH"],
+        ["Atomic number of Carbon?","6","12|8"],
+        ["Lightest element in periodic table?","Hydrogen","Helium|Lithium"],
+        ["Acid found in lemons and limes?","Citric Acid","Acetic Acid|Sulfuric Acid"],
+        ["Chemical bond sharing electron pairs?","Covalent","Ionic|Metallic"],
+        ["Hardest natural allotrope of carbon?","Diamond","Graphite|Fullerene"]
+      ],
+      BIOLOGY: [
+        ["Powerhouse of the cell?","Mitochondria","Nucleus|Ribosome"],
+        ["Plants absorb which gas for photosynthesis?","CO2","O2|N2"],
+        ["Gas produced by plants in photosynthesis?","Oxygen","Carbon Dioxide|Nitrogen"],
+        ["Chambers in a human heart?","4","2|3"],
+        ["Number of bones in an adult body?","206","106|306"],
+        ["Normal human body temperature (°C)?","37","35|39"],
+        ["Universal red blood cell donor type?","O Negative","AB Positive|A Positive"],
+        ["Organ that filters blood to produce urine?","Kidneys","Liver|Pancreas"],
+        ["Oxygen-carrying protein in red blood cells?","Hemoglobin","Insulin|Collagen"],
+        ["Master gland of endocrine system?","Pituitary","Thyroid|Adrenal"],
+        ["Molecule storing genetic code?","DNA","RNA|ATP"],
+        ["Largest organ of the human body?","Skin","Liver|Lungs"]
+      ],
+      ASTRONOMY: [
+        ["Closest star to Earth?","The Sun","Proxima Centauri|Sirius"],
+        ["Largest planet in our solar system?","Jupiter","Saturn|Neptune"],
+        ["The Red Planet?","Mars","Venus|Mercury"],
+        ["Hottest planet in our solar system?","Venus","Mercury|Mars"],
+        ["Planet known for prominent ring system?","Saturn","Uranus|Jupiter"],
+        ["Closest galaxy to the Milky Way?","Andromeda","Triangulum|Sombrero"],
+        ["Time for sunlight to reach Earth?","8 minutes","8 seconds|8 hours"],
+        ["Natural satellite of Earth?","The Moon","Titan|Phobos"],
+        ["Largest moon of Saturn?","Titan","Europa|Ganymede"],
+        ["Planet tilted on its side at ~98 degrees?","Uranus","Neptune|Mars"]
+      ],
+      CUSTOM: []
     };
+    QBANK.ELEMENTS = QBANK.CHEMISTRY;
+    QBANK.SCIENCE = QBANK.PHYSICS;
+
     function nextQ() {
       const m = state.gmode; let q;
       if (m === "MATH") {
-        const mx = 8 + state.level * 6; let a = 1 + rnd(mx), b = 1 + rnd(mx); const op = state.level < 2 ? "+" : ["+", "-", "Ã—"][rnd(3)];
-        if (op === "-" && b > a) [a, b] = [b, a];
-        if (op === "Ã—") { a = 2 + rnd(3 + state.level * 2); b = 2 + rnd(9); }
-        const ans = op === "+" ? a + b : op === "-" ? a - b : a * b, w = new Set();
-        while (w.size < 2) { const v = ans + (rnd(2) ? 1 : -1) * (1 + rnd(5 + state.level)); if (v !== ans && v >= 0) w.add(v); }
+        const mx = 6 + state.level * 4; let a = 1 + rnd(mx), b = 1 + rnd(mx);
+        const ops = state.level < 2 ? ["+", "-"] : ["+", "-", "×", "÷"];
+        const op = ops[rnd(ops.length)];
+        let ans;
+        if (op === "+") { ans = a + b; }
+        else if (op === "-") { if (b > a) [a, b] = [b, a]; ans = a - b; }
+        else if (op === "×") { a = 2 + rnd(3 + state.level * 2); b = 2 + rnd(9); ans = a * b; }
+        else { const mult = 2 + rnd(9); b = 2 + rnd(6); a = mult * b; ans = mult; }
+        const w = new Set();
+        while (w.size < 2) { const v = ans + (rnd(2) ? 1 : -1) * (1 + rnd(4 + state.level)); if (v !== ans && v >= 0) w.add(v); }
         q = { t: `${a} ${op} ${b} = ?`, a: String(ans), w: [...w].map(String), x: `${a} ${op} ${b} = ${ans}` };
       } else {
-        const e = QBANK[m][rnd(QBANK[m].length)];
-        const w = e[2] ? e[2].split("|") : shuffle(QBANK[m].map(v => v[1]).filter(v => v !== e[1])).slice(0, 2);
+        const list = (QBANK[m] && QBANK[m].length) ? QBANK[m] : QBANK.PHYSICS;
+        const e = list[rnd(list.length)];
+        const w = e[2] ? e[2].split("|") : shuffle(list.map(v => v[1]).filter(v => v !== e[1])).slice(0, 2);
         q = { t: e[0], a: e[1], w, x: `${e[0].replace("?", "")}: ${e[1]}` };
       }
       state.quiz = q;
@@ -1240,7 +1324,7 @@
         state.level = 1 + Math.floor(state.gameScore / 150);
         if (state.gmode === "ARCADE") { if (Math.random() < 0.02 + state.level * 0.004 && state.gems.length < 4 + state.level) spawnGem(); }
         else if (!state.gems.some(g => g.type === "ans")) nextQ();
-        badge(`${state.gmode === "ARCADE" ? "PRANA" : state.gmode} ${state.gameScore} · x${mult} · LV ${state.level} · ${"â™¥".repeat(state.lives)}`);
+        badge(`${state.gmode === "ARCADE" ? "PRANA" : state.gmode} ${state.gameScore} · x${mult} · LV ${state.level} · LIVES: ${state.lives}`);
       }
       c.save();
       if (state.flash > 0) { c.fillStyle = `rgba(255,30,70,${state.flash * 0.25})`; c.fillRect(0, 0, w, h); state.flash -= 0.06; }
@@ -1271,10 +1355,10 @@
               if (g.ok) {
                 state.streak++; state.gameScore += 20 * Math.min(5, 1 + Math.floor(state.streak / 5));
                 playAudioTone(660 + Math.min(state.streak, 20) * 25, "triangle", 0.25); ring(g.x, g.y, "#34d399");
-                setFb("✓ " + state.quiz.x, true); state.gems.forEach(o => { if (o.type === "ans") o.dead = 1; });
+                setFb("CORRECT · " + state.quiz.x, true); state.gems.forEach(o => { if (o.type === "ans") o.dead = 1; });
               } else {
                 state.lives--; state.streak = 0; state.flash = 1; ring(g.x, g.y, "#ff3355"); playAudioTone(140, "sawtooth", 0.3, 0.2);
-                setFb("âœ— Answer: " + state.quiz.a, false);
+                setFb("INCORRECT · " + state.quiz.x, false);
                 if (state.lives <= 0) { state.over = true; if (state.gameScore > state.best) { state.best = state.gameScore; try { localStorage.setItem("divya_best", state.best); } catch (e) {} } }
               }
             } else {
@@ -1356,9 +1440,21 @@
           const dl = new T.DirectionalLight(0xffffff, 2.2); dl.position.set(200, 500, 900); AV.scene.add(dl);
           AV.cam = new T.OrthographicCamera(-1, 1, 1, -1, -5000, 5000);
         }
-        const gltf = await new GLTFLoader().loadAsync(src || "./assets/avatar.glb");
+        const loader = new GLTFLoader();
+        let gltf = null;
+        const targetSrc = src || "./assets/avatar.glb";
+        try {
+          gltf = await loader.loadAsync(targetSrc);
+        } catch (err1) {
+          if (!src || src.includes("avatar.glb")) {
+            const fallbackSrc = targetSrc.includes("assets/") ? "./avatar.glb" : "./assets/avatar.glb";
+            gltf = await loader.loadAsync(fallbackSrc);
+          } else {
+            throw err1;
+          }
+        }
         avatarBuild(gltf.scene); AV.ready = true;
-      } catch (e) { console.error(e); badge("AVATAR FAILED · keep avatar.glb next to index.html and open via https/localhost"); AV.msgUntil = performance.now() + 6000; }
+      } catch (e) { console.error(e); badge("AVATAR FAILED · verify avatar.glb is present and open via https/localhost"); AV.msgUntil = performance.now() + 6000; }
       AV.loading = false;
     }
     function avatarBuild(root) {
@@ -1507,7 +1603,6 @@
           0
         );
       }
-    }
     }
     document.getElementById("av-cal").addEventListener("click", avCalibrate);
     document.getElementById("av-reset").addEventListener("click", () => { AV.cal = null; });
@@ -1695,12 +1790,72 @@
       });
     });
 
-    // Prana Catch modes
+    // Prana Catch modes & Educational Curriculum
+    const eduModal = document.getElementById("edu-modal");
     document.querySelectorAll("#game-dock .filter-tab").forEach(tab => {
       tab.addEventListener("click", () => {
+        if (tab.id === "btn-custom-edu") {
+          if (eduModal) eduModal.style.display = "flex";
+          return;
+        }
         document.querySelectorAll("#game-dock .filter-tab").forEach(t => t.classList.remove("active"));
-        tab.classList.add("active"); state.gmode = tab.dataset.gmode; resetGame(); playAudioTone(520, "triangle", 0.2);
+        tab.classList.add("active");
+        state.gmode = tab.dataset.gmode || "ARCADE";
+        resetGame();
+        playAudioTone(520, "triangle", 0.2);
       });
+    });
+
+    // Educational modal handlers
+    document.getElementById("btn-edu-close")?.addEventListener("click", () => {
+      if (eduModal) eduModal.style.display = "none";
+    });
+    document.querySelectorAll(".btn-pack-select").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".btn-pack-select").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        const pack = btn.dataset.pack;
+        state.gmode = pack;
+        document.querySelectorAll("#game-dock .filter-tab").forEach(t => {
+          t.classList.toggle("active", t.dataset.gmode === pack);
+        });
+        resetGame();
+        playAudioTone(520, "triangle", 0.2);
+      });
+    });
+    document.getElementById("btn-edu-load-custom")?.addEventListener("click", () => {
+      const input = document.getElementById("edu-custom-input");
+      const txt = (input && input.value || "").trim();
+      if (!txt) return;
+      const parsed = [];
+      txt.split("\n").forEach(line => {
+        const parts = line.split(",").map(s => s.trim());
+        if (parts.length >= 2) {
+          const q = parts[0];
+          const a = parts[1];
+          const w = parts[2] || "";
+          parsed.push([q, a, w]);
+        }
+      });
+      if (parsed.length > 0) {
+        QBANK.CUSTOM = parsed;
+        state.gmode = "CUSTOM";
+        document.querySelectorAll("#game-dock .filter-tab").forEach(t => t.classList.remove("active"));
+        const customTab = document.getElementById("btn-custom-edu");
+        if (customTab) { customTab.classList.add("active"); customTab.textContent = `Custom (${parsed.length})`; }
+        if (eduModal) eduModal.style.display = "none";
+        resetGame();
+        badge(`CUSTOM PACK LOADED · ${parsed.length} QUESTIONS`);
+        playAudioTone(660, "triangle", 0.25);
+      }
+    });
+    document.getElementById("btn-edu-reset-default")?.addEventListener("click", () => {
+      const input = document.getElementById("edu-custom-input");
+      if (input) input.value = "";
+      QBANK.CUSTOM = [];
+      const customTab = document.getElementById("btn-custom-edu");
+      if (customTab) customTab.textContent = "Custom Quiz";
+      badge("CUSTOM PACK CLEARED");
     });
 
     // Hair Swatches
@@ -2161,14 +2316,57 @@
       else document.documentElement.requestFullscreen?.().catch(() => {});
     });
     let deferredInstall = null;
+    const pwaBanner = document.getElementById("pwa-install-banner");
+    const bannerInstallBtn = document.getElementById("btn-banner-install");
+    const bannerDismissBtn = document.getElementById("btn-banner-dismiss");
+
     window.addEventListener("beforeinstallprompt", e => {
-      e.preventDefault(); deferredInstall = e;
+      e.preventDefault();
+      deferredInstall = e;
       document.getElementById("row-install").style.display = "flex";
+      if (!localStorage.getItem("divya_pwa_dismissed") && pwaBanner) {
+        pwaBanner.style.display = "flex";
+      }
     });
+
+    if (bannerInstallBtn) {
+      bannerInstallBtn.addEventListener("click", async () => {
+        if (!deferredInstall) return;
+        deferredInstall.prompt();
+        const { outcome } = await deferredInstall.userChoice;
+        deferredInstall = null;
+        if (pwaBanner) pwaBanner.style.display = "none";
+        document.getElementById("row-install").style.display = "none";
+        if (outcome === "accepted") {
+          localStorage.setItem("divya_pwa_dismissed", "installed");
+        }
+      });
+    }
+
+    if (bannerDismissBtn) {
+      bannerDismissBtn.addEventListener("click", () => {
+        if (pwaBanner) pwaBanner.style.display = "none";
+        localStorage.setItem("divya_pwa_dismissed", "true");
+      });
+    }
+
     document.getElementById("btn-install").addEventListener("click", async () => {
       if (!deferredInstall) return;
-      deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null;
+      deferredInstall.prompt();
+      const { outcome } = await deferredInstall.userChoice;
+      deferredInstall = null;
+      if (pwaBanner) pwaBanner.style.display = "none";
       document.getElementById("row-install").style.display = "none";
+      if (outcome === "accepted") {
+        localStorage.setItem("divya_pwa_dismissed", "installed");
+      }
+    });
+
+    window.addEventListener("appinstalled", () => {
+      deferredInstall = null;
+      if (pwaBanner) pwaBanner.style.display = "none";
+      document.getElementById("row-install").style.display = "none";
+      localStorage.setItem("divya_pwa_dismissed", "installed");
     });
     if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
       navigator.serviceWorker.register("./sw.js").catch(() => {});

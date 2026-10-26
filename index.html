@@ -208,13 +208,16 @@
           <input type="file" id="av-file" accept=".glb" style="display:none">
         </div>
 
-        <!-- Scene 4: Prana Catch Modes Dock -->
+        <!-- Scene 4: Prana Catch Modes Dock (Educational STEM Curriculum) -->
         <div id="game-dock" class="dock-container interactive" style="display: none;">
           <button class="filter-tab active" data-gmode="ARCADE">Arcade</button>
-          <button class="filter-tab" data-gmode="MATH">Math Catch</button>
+          <button class="filter-tab" data-gmode="MATH">Math</button>
+          <button class="filter-tab" data-gmode="PHYSICS">Physics</button>
+          <button class="filter-tab" data-gmode="CHEMISTRY">Chemistry</button>
+          <button class="filter-tab" data-gmode="BIOLOGY">Biology</button>
+          <button class="filter-tab" data-gmode="ASTRONOMY">Astronomy</button>
           <button class="filter-tab" data-gmode="CAPITALS">World Capitals</button>
-          <button class="filter-tab" data-gmode="ELEMENTS">Elements</button>
-          <button class="filter-tab" data-gmode="SCIENCE">Science Quiz</button>
+          <button class="filter-tab" id="btn-custom-edu">Custom Quiz</button>
         </div>
       </footer>
     </div>
@@ -318,11 +321,61 @@
       </div>
     </div>
 
-    <!-- Onboarding Modal -->
+        <!-- Floating PWA Install Banner -->
+    <div id="pwa-install-banner" class="pwa-banner" style="display: none;" role="dialog" aria-label="Install Application">
+      <div class="pwa-banner-main">
+        <img src="icons/icon-192.png" alt="" class="pwa-banner-icon" width="36" height="36">
+        <div class="pwa-banner-text">
+          <div class="pwa-banner-title">Install Divya Drusti</div>
+          <div class="pwa-banner-desc">Offline AR studio · zero latency · full screen</div>
+        </div>
+      </div>
+      <div class="pwa-banner-actions">
+        <button id="btn-banner-install" class="pwa-btn-install" type="button">INSTALL</button>
+        <button id="btn-banner-dismiss" class="pwa-btn-dismiss" type="button" aria-label="Dismiss banner">✕</button>
+      </div>
+    </div>
+
+    <!-- Educational Curriculum & Custom Quiz Modal -->
+    <div id="edu-modal" class="onboard-modal" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div class="modal-title">EDUCATIONAL CURRICULUM</div>
+          <div class="modal-tag">Interactive STEM &amp; AR Classroom Mode</div>
+        </div>
+        <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5;">
+          Select a subject pack or load custom questions for classroom interactive quizzes. Students catch the correct floating orb using head tracking and jaw opening.
+        </div>
+        <div class="settings-group" style="margin-bottom: 12px;">
+          <div class="section-label">Preset Curriculum Packs</div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px; margin-top: 6px;">
+            <button class="switch-btn btn-pack-select active" data-pack="MATH">Math &amp; Arithmetic</button>
+            <button class="switch-btn btn-pack-select" data-pack="PHYSICS">Physics &amp; Optics</button>
+            <button class="switch-btn btn-pack-select" data-pack="CHEMISTRY">Chemistry &amp; Elements</button>
+            <button class="switch-btn btn-pack-select" data-pack="BIOLOGY">Biology &amp; Anatomy</button>
+            <button class="switch-btn btn-pack-select" data-pack="ASTRONOMY">Astronomy &amp; Space</button>
+            <button class="switch-btn btn-pack-select" data-pack="CAPITALS">World Capitals</button>
+          </div>
+        </div>
+        <div class="settings-group" style="margin-bottom: 12px;">
+          <div class="section-label">Custom Teacher Pack (One per line: Question, Answer, Wrong1|Wrong2)</div>
+          <textarea id="edu-custom-input" rows="4" style="width: 100%; background: rgba(0,0,0,0.5); border: 1px solid var(--border-subtle); border-radius: 6px; color: #f8fafc; font-family: var(--font-mono); font-size: 11px; padding: 8px; resize: vertical;" placeholder="Speed of light (km/s)?, 300,000, 30,000|3,000&#10;Powerhouse of the cell?, Mitochondria, Nucleus|Ribosome"></textarea>
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            <button id="btn-edu-load-custom" class="switch-btn" style="flex: 1;">LOAD CUSTOM PACK</button>
+            <button id="btn-edu-reset-default" class="btn-ghost" style="flex: 1; font-size: 10px;">RESET DEFAULTS</button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="btn-edu-close" class="btn-primary">Apply &amp; Start Quiz</button>
+        </div>
+      </div>
+    </div>
+
+<!-- Onboarding Modal -->
     <div id="onboard-modal" class="onboard-modal">
       <div class="modal-card">
         <div class="modal-head">
-          <div class="modal-title">DIVYA // à¤¦à¤¿à¤µà¥à¤¯</div>
+          <div class="modal-title">DIVYA // दिव्य</div>
           <div class="modal-tag">Puranic Spatial Vision Engine</div>
         </div>
 

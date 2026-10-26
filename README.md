@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="og-preview.jpg" alt="Divya Drusti — Spatial Vision Studio by Razel Tech" width="100%">
+<img src="assets/og-preview.jpg" alt="Divya Drusti — Spatial Vision Studio by Razel Tech" width="25%">
 
 # DIVYA DRUSTI — Spatial Vision Studio
 
@@ -100,11 +100,14 @@ Pick a mode in the game dock. A question appears at the top and three answer orb
 
 | Mode | Content |
 |---|---|
-| Arcade | The original game |
-| Math Catch | Addition, then subtraction and multiplication as levels rise |
-| World Capitals | 17 countries |
-| Elements | Chemical symbols (Au, Fe, Na...) |
-| Science Quiz | Planets, biology, physics and general science |
+| **Arcade** | Fast-paced reflex game with gold bonuses and hazards |
+| **Math** | Arithmetic (+, -, ×, ÷), exponents, mental calculation scaling with level |
+| **Physics** | Optics, mechanics, forces, wave frequencies, SI units |
+| **Chemistry** | Elements, symbols, pH scales, chemical formulas, bonds |
+| **Biology** | Cells, organ systems, genetics, anatomy, photosynthesis |
+| **Astronomy** | Solar system, planets, light-travel times, cosmic distances |
+| **World Capitals** | Global geography and nation capitals |
+| **Custom Quiz** | In-app teacher modal to paste or load custom classroom questions |
 
 ---
 
@@ -112,7 +115,7 @@ Pick a mode in the game dock. A question appears at the top and three answer orb
 
 1. **Dual pinch** (thumb + index on both hands) opens the spatial prism. Move fingers to reshape it, hands off-screen fades it.
 2. Bottom tabs switch scene; the dock below changes effect, hair or lip colour, or spell.
-3. **Pinch Shutter:** open the prism wide (outline turns green), then pinch index to thumb on both hands to save a clean, watermarked camera photo.
+3. **Pinch Shutter:** open the prism wide (outline turns green), then pinch index to thumb on both hands to save a clean, watermarked camera photo. Global hotkeys **Space** and **C** also trigger instant capture.
 4. **Wink** to cycle through prism shader effects.
 5. **Prism Crisscross** ripples and Kaleidoscope centre follow your index finger.
 6. Settings (gear icon): effect sliders, skin smoothing, overlays, capture photo, install app.
@@ -123,24 +126,26 @@ Pick a mode in the game dock. A question appears at the top and three answer orb
 
 | Tool | How to access |
 |---|---|
-| **Capture Photo** | Settings drawer → Snap, or use the Pinch Shutter gesture, or the camera button in the HUD |
+| **Capture Photo** | Settings drawer → Snap, Pinch Shutter gesture, camera button in HUD, or `Space`/`C` hotkeys |
 | **Fullscreen** | Settings drawer → Go |
 | **Mirror Toggle** | Top-right arrow icon |
 | **Camera Switch** | Top-right camera icon (cycles between available devices) |
 | **Sound Toggle** | Top-right speaker icon |
-| **Install PWA** | Settings drawer → Install (appears when the browser offers installation) |
+| **Install PWA** | Floating install banner at top or Settings drawer → Install |
 
 ---
 
-## Add Your Own Quiz Questions
+## Educational Curriculum & Custom Teacher Packs
 
-Add questions in the `QBANK` object in `index.html`:
-
-```js
-// Format: ["Question?", "Right answer", "wrong1|wrong2"]
-CAPITALS: [["France", "Paris"], ...],
-SCIENCE:  [["Largest planet?", "Jupiter", "Saturn|Mars"], ...]
-```
+Educators and institutions can load custom quiz packs directly through the UI without editing code:
+1. In **Prana Catch**, click **Custom Quiz**.
+2. Select a STEM curriculum preset (Math, Physics, Chemistry, Biology, Astronomy, Capitals).
+3. Or paste custom questions in CSV format:
+   ```text
+   Speed of light (km/s)?, 300,000, 30,000|3,000
+   Powerhouse of the cell?, Mitochondria, Nucleus|Ribosome
+   ```
+4. Click **Load Custom Pack** to start an interactive classroom AR session.
 
 ---
 

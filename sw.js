@@ -1,5 +1,5 @@
 // DIVYA service worker - app shell + runtime cache for MediaPipe (CDN + models) so it works offline after first load
-const VERSION = "divya-v6";
+const VERSION = "divya-v8";
 const SHELL = [
   "./",
   "./index.html",
@@ -12,11 +12,18 @@ const SHELL = [
 const RUNTIME_HOSTS = ["cdn.jsdelivr.net", "storage.googleapis.com"];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())
+  );
 });
+
 self.addEventListener("activate", e => {
-  e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== VERSION).map(x => caches.delete(x)))).then(() => self.clients.claim()));
+  e.waitUntil(
+    caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
 });
+
 self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method !== "GET") return;
@@ -24,13 +31,56 @@ self.addEventListener("fetch", e => {
   const same = url.origin === location.origin;
   if (!same && !RUNTIME_HOSTS.includes(url.hostname)) return;
 
-  if (req.mode === "navigate") { // network first so updates arrive, cache as offline fallback
-    e.respondWith(fetch(req).then(r => { caches.open(VERSION).then(c => c.put("./index.html", r.clone())); return r; })
-      .catch(() => caches.match("./index.html")));
+  if (req.mode === "navigate") {
+    // Network first for HTML navigation so updates arrive immediately
+    e.respondWith(
+      fetch(req)
+        .then(r => {
+          if (r && r.ok && !r.bodyUsed) {
+            try {
+              const copy = r.clone();
+              caches.open(VERSION).then(c => c.put("./index.html", copy)).catch(() => {});
+            } catch (err) {}
+          }
+          return r;
+        })
+        .catch(() => caches.match("./index.html"))
+    );
     return;
   }
-  e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(r => {
-    if (r && r.status === 200) { const copy = r.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
-    return r;
-  })));
+
+  e.respondWith(
+    caches.match(req).then(hit => {
+      if (hit) return hit;
+      return fetch(req)
+        .then(r => {
+          if (!r || !r.ok) {
+            // Fallback for avatar.glb if requested at root or assets/
+            if (r && r.status === 404 && url.pathname.endsWith("/avatar.glb")) {
+              const alt = url.pathname.includes("/assets/") ? "./avatar.glb" : "./assets/avatar.glb";
+              return fetch(alt)
+                .then(r2 => {
+                  if (r2 && r2.ok && !r2.bodyUsed) {
+                    try {
+                      const copy2 = r2.clone();
+                      caches.open(VERSION).then(c => c.put(req, copy2)).catch(() => {});
+                    } catch (e) {}
+                  }
+                  return r2;
+                })
+                .catch(() => r);
+            }
+            return r;
+          }
+          if (!r.bodyUsed) {
+            try {
+              const copy = r.clone();
+              caches.open(VERSION).then(c => c.put(req, copy)).catch(() => {});
+            } catch (e) {}
+          }
+          return r;
+        })
+        .catch(() => caches.match(req));
+    })
+  );
 });
