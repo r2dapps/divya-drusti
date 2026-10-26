@@ -335,7 +335,7 @@
         vec3 fx = rawColor.rgb;
 
         if (u_filter == 0) {
-          // 0: SPECTRAL PRISM (Physical Optical Crystal, 7-Band Cauchy Dispersion & Caustic Refraction)
+          // 0: SPECTRAL PRISM (High-Performance Cauchy Dispersion & Prismatic Caustics)
           vec2 center = (u_v0 + u_v1 + u_v2 + u_v3) * 0.25;
           vec2 toCenter = v_screenUv - center;
           vec2 toCenterAsp = toCenter * asp2;
@@ -355,64 +355,21 @@
             ripple += 2.8 * sin(pDist * 32.0 - u_time * 5.0) * exp(-pDist * 7.0);
           }
 
-          // Edge bevel refraction normal (light bends steeply at glass boundary)
+          // Edge bevel refraction normal
           float bevelWidth = 0.08;
           float bevelDist = clamp(dEdge / bevelWidth, 0.0, 1.0);
           float bevelCurv = 1.0 - sqrt(bevelDist);
           vec2 refrVec = mix(facetNormal * 0.022, refrDir * 0.042, 0.65) * ripple;
           refrVec += refrDir * (bevelCurv * 0.038);
 
-          // Base Cauchy dispersion magnitude scaled by user slider
+          // Base Cauchy dispersion magnitude
           float dispBase = (0.016 * u_splatRadius + distCenter * 0.026 + bevelCurv * 0.04) * ripple;
 
-          // 7-Band Continuous Spectral Sampling (Red to Violet)
-          // CIE approx wavelengths: 700nm, 620nm, 580nm, 530nm, 490nm, 450nm, 400nm
-          vec3 specAccum = vec3(0.0);
-          vec3 weightAccum = vec3(0.0);
-
-          // Band 1: Deep Red (700nm)
-          vec2 uv1 = getCameraUv(v_screenUv - refrVec - refrDir * (dispBase * 1.45));
-          vec3 w1 = vec3(1.0, 0.05, 0.0);
-          specAccum += texture(u_video, uv1).rgb * w1;
-          weightAccum += w1;
-
-          // Band 2: Orange (620nm)
-          vec2 uv2 = getCameraUv(v_screenUv - refrVec - refrDir * (dispBase * 0.95));
-          vec3 w2 = vec3(1.0, 0.48, 0.0);
-          specAccum += texture(u_video, uv2).rgb * w2;
-          weightAccum += w2;
-
-          // Band 3: Amber / Yellow (580nm)
-          vec2 uv3 = getCameraUv(v_screenUv - refrVec - refrDir * (dispBase * 0.45));
-          vec3 w3 = vec3(0.9, 0.9, 0.05);
-          specAccum += texture(u_video, uv3).rgb * w3;
-          weightAccum += w3;
-
-          // Band 4: Pure Green (530nm, optical center)
-          vec2 uv4 = getCameraUv(v_screenUv - refrVec);
-          vec3 w4 = vec3(0.1, 1.0, 0.2);
-          specAccum += texture(u_video, uv4).rgb * w4;
-          weightAccum += w4;
-
-          // Band 5: Cyan (490nm)
-          vec2 uv5 = getCameraUv(v_screenUv - refrVec + refrDir * (dispBase * 0.50));
-          vec3 w5 = vec3(0.0, 0.9, 0.95);
-          specAccum += texture(u_video, uv5).rgb * w5;
-          weightAccum += w5;
-
-          // Band 6: Royal Blue (450nm)
-          vec2 uv6 = getCameraUv(v_screenUv - refrVec + refrDir * (dispBase * 1.05));
-          vec3 w6 = vec3(0.1, 0.35, 1.0);
-          specAccum += texture(u_video, uv6).rgb * w6;
-          weightAccum += w6;
-
-          // Band 7: Deep Violet (400nm)
-          vec2 uv7 = getCameraUv(v_screenUv - refrVec + refrDir * (dispBase * 1.60));
-          vec3 w7 = vec3(0.65, 0.05, 1.0);
-          specAccum += texture(u_video, uv7).rgb * w7;
-          weightAccum += w7;
-
-          vec3 refracted = specAccum / weightAccum;
+          // High-Efficiency 3-Channel Dispersion (Locked 60 FPS on mobile GPUs)
+          vec3 refracted;
+          refracted.r = texture(u_video, getCameraUv(v_screenUv - refrVec - refrDir * (dispBase * 1.35))).r;
+          refracted.g = texture(u_video, getCameraUv(v_screenUv - refrVec)).g;
+          refracted.b = texture(u_video, getCameraUv(v_screenUv - refrVec + refrDir * (dispBase * 1.35))).b;
 
           // Prismatic Internal Caustics & Sweeping Rainbow Flares
           float facetAngle = atan(toCenterAsp.y, toCenterAsp.x);
@@ -2420,6 +2377,9 @@
         }
       }, { passive: false });
 
+      // Only attach mouse drag on desktop pointer (not mobile touch screens)
+      if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+
       let isDown = false;
       let startX = 0;
       let scrollLeft = 0;
@@ -2441,7 +2401,7 @@
         if (!isDown) return;
         const x = e.pageX - el.offsetLeft;
         const walk = (x - startX) * 1.4;
-        if (Math.abs(walk) > 5) hasDragged = true;
+        if (Math.abs(walk) > 6) hasDragged = true;
         el.scrollLeft = scrollLeft - walk;
       });
 
@@ -2843,7 +2803,9 @@
           }
 
           // Face Mesh & Wink Detection (runs across all modes for realistic head/face tracking)
-          if (faceLandmarker && frameStep % (isAvatarScene ? 3 : 2) === 1) {
+          const needFace = state.scene === "MAKEUP" || state.scene === "GAME" || isAvatarScene || state.showFaceMesh;
+          const faceInterval = needFace ? (isAvatarScene ? 3 : 2) : 6;
+          if (faceLandmarker && frameStep % faceInterval === 1) {
             const faceRes = faceLandmarker.detectForVideo(video, timeMs);
             if (faceRes.faceLandmarks && faceRes.faceLandmarks.length > 0) {
               state.faceLandmarks = faceRes.faceLandmarks[0];
