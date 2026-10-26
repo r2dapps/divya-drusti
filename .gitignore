@@ -1,0 +1,30 @@
+# Backup files
+backups/
+index_backup_v2.html
+index_old.html
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temp & logs
+*.log
+npm-debug.log*
+
+# Node (if a dev server is added later)
+node_modules/
+dist/
+
+# Gemini AI working directory
+.gemini/
+*.gemini_*
+
+# Large generated artifacts (keep og-preview.jpg and favicon sources committed)
+favicon.jpg

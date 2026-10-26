@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#07080b">
+
+  <!-- Primary SEO -->
+  <title>Divya Drusti — Spatial Vision Studio | AR Camera Effects by Razel Tech</title>
+  <meta name="description" content="Divya Drusti is a real-time AR camera studio in your browser: 14 WebGL shaders, AI hair & makeup try-on, gesture spells, 3D avatar motion capture and an educational face-controlled game. No install. No server. Powered by Razel Tech.">
+  <meta name="keywords" content="AR camera effects, augmented reality browser, WebGL shader, hair color AR, face makeup AR, gesture control, MediaPipe, PWA, Razel Tech, Divya Drusti, spatial vision studio, avatar motion capture, face effects online">
+  <meta name="author" content="Razel Tech">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://razeltech.github.io/DivyaDrusti/">
+
+  <!-- Open Graph (Facebook, WhatsApp, LinkedIn, iMessage) -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Divya Drusti — Spatial Vision Studio">
+  <meta property="og:title" content="Divya Drusti — Spatial Vision Studio | AR Camera Effects">
+  <meta property="og:description" content="Real-time AR camera studio in your browser: 14 WebGL shader effects, AI hair & makeup try-on, gesture spells, 3D avatar motion capture, and an educational game. No install. No data leaves your device. Powered by Razel Tech.">
+  <meta property="og:image" content="https://razeltech.github.io/DivyaDrusti/assets/og-preview.jpg">
+  <meta property="og:image:secure_url" content="https://razeltech.github.io/DivyaDrusti/assets/og-preview.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="675">
+  <meta property="og:image:alt" content="Divya Drusti Spatial Vision Studio — AR camera studio preview showing a glowing prism with colorful shader effects, powered by Razel Tech">
+  <meta property="og:url" content="https://razeltech.github.io/DivyaDrusti/">
+  <meta property="og:locale" content="en_IN">
+
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@razeltech">
+  <meta name="twitter:creator" content="@razeltech">
+  <meta name="twitter:title" content="Divya Drusti — Spatial Vision Studio | AR Camera Effects">
+  <meta name="twitter:description" content="Real-time AR camera studio in your browser: 14 WebGL shaders, AI hair & makeup, gesture spells, 3D avatar motion capture. No install. Powered by Razel Tech.">
+  <meta name="twitter:image" content="https://razeltech.github.io/DivyaDrusti/assets/og-preview.jpg">
+  <meta name="twitter:image:alt" content="Divya Drusti Spatial Vision Studio preview by Razel Tech">
+
+  <!-- WhatsApp & Telegram specific (uses og: tags; image must be exactly reachable over HTTPS) -->
+  <!-- og:image above covers WhatsApp. Ensure assets/og-preview.jpg is deployed alongside index.html. -->
+
+  <!-- PWA & Mobile -->
+  <link rel="manifest" href="manifest.json">
+  <!-- Branded favicons (generated from the Divya Drusti prism icon) -->
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Divya Drusti">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Structured Data: JSON-LD (Google, Bing) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Divya Drusti — Spatial Vision Studio",
+    "description": "Real-time AR camera studio in your browser with WebGL shaders, AI hair and makeup try-on, gesture-controlled spells, 3D avatar motion capture and an educational game. No install required.",
+    "url": "https://razeltech.github.io/DivyaDrusti/",
+    "image": "https://razeltech.github.io/DivyaDrusti/assets/og-preview.jpg",
+    "applicationCategory": "MultimediaApplication",
+    "operatingSystem": "Web",
+    "browserRequirements": "Requires WebGL2 and a webcam. Best in Chrome, Edge, or Safari 16+.",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
+    "author": { "@type": "Organization", "name": "Razel Tech", "url": "https://razeltech.github.io" },
+    "keywords": "AR, augmented reality, WebGL, hair color, face effects, gesture, MediaPipe, PWA"
+  }
+  </script>
+  <script>
+    // Suppress benign TensorFlow Lite / XNNPACK Emscripten stderr info logs
+    (function() {
+      const _origErr = console.error;
+      console.error = function(...args) {
+        const txt = args.map(a => (typeof a === 'string' ? a : (a && a.message) || '')).join(' ');
+        if (txt.includes('INFO:') || txt.includes('XNNPACK') || txt.includes('TensorFlow Lite')) {
+          console.info(...args);
+          return;
+        }
+        _origErr.apply(console, args);
+      };
+    })();
+  </script>
+  <!-- Main Application Stylesheet -->
+  <link rel="stylesheet" href="css/app.css">
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head>
+<body>
+  <div id="stage-container">
+    <div id="viewport-frame">
+      <video id="webcam-source" playsinline muted autoplay style="display:none;"></video>
+      <canvas id="render-surface"></canvas>
+      <canvas id="avatar-canvas"></canvas>
+      <canvas id="vector-overlay"></canvas>
+    </div>
+
+    <!-- HUD Layer -->
+    <div class="hud-layer">
+      <!-- Top Navigation -->
+      <header class="top-bar">
+        <div id="btn-brand" class="brand-block interactive" title="About DIVYA">
+          <div class="brand-title">
+            <div id="status-indicator" class="status-dot"></div>
+            <span>DIVYA</span>
+          </div>
+          <div class="brand-tag">SPATIAL VISION STUDIO</div>
+        </div>
+
+        <div class="top-actions interactive">
+          <button id="btn-camera-flip" class="btn-icon active" title="Toggle Mirror View">
+            <svg viewBox="0 0 24 24"><path d="M8 7h12m0 0l-4-4m4 4l-4 4m-8 6H4m0 0l4 4m-4-4l4-4"/></svg>
+          </button>
+          <button id="btn-camera-swap" class="btn-icon" title="Switch Camera Device">
+            <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
+          <button id="btn-hud-capture" class="btn-icon" title="Capture Photo (Space / C)">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="3.5" fill="currentColor" stroke="none"/><path d="M20 6h-2.586l-1.707-1.707A1 1 0 0 0 15 4H9a1 1 0 0 0-.707.293L6.586 6H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="13" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          </button>
+          <button id="btn-audio-toggle" class="btn-icon active" title="Audio Synthesis Active">
+            <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+
+          </button>
+          <button id="btn-open-settings" class="btn-icon" title="Settings & Parameters">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Dynamic Status & Spell Feedback Badge -->
+      <div id="status-badge" class="status-badge">DIVYA ENGAGED</div>
+
+      <!-- Bottom Scene & FX Dock -->
+      <footer class="bottom-bar">
+        <!-- Scene Categories -->
+        <div class="scene-selector interactive">
+          <div class="scene-pill">
+            <button class="scene-btn active" data-scene="PRISM">Spatial Prism</button>
+            <button class="scene-btn" data-scene="MAKEUP">Hair &amp; Face AR</button>
+            <button class="scene-btn" data-scene="MYSTIC">Mystic Jutsu</button>
+            <button class="scene-btn" data-scene="GAME">Prana Catch</button>
+            <button class="scene-btn" data-scene="AVATAR">Avatar</button>
+          </div>
+        </div>
+
+        <!-- Scene 1: Spatial Prism Shader Dock -->
+        <div id="prism-dock" class="dock-container interactive">
+          <button class="filter-tab active" data-filter="SPECTRAL_PRISM">Spectral Prism</button>
+          <button class="filter-tab" data-filter="PRISM_CRISSCROSS">Prism Crisscross</button>
+          <button class="filter-tab" data-filter="KALEIDOSCOPE">Kaleidoscope</button>
+          <button class="filter-tab" data-filter="ZOOM_LENS">Zoom Lens</button>
+          <button class="filter-tab" data-filter="NEON_EDGE">Neon Edge</button>
+          <button class="filter-tab" data-filter="GAUSSIAN_SPLAT">Gaussian Splat</button>
+          <button class="filter-tab" data-filter="TOPOLOGICAL_MESH">Point Cloud</button>
+          <button class="filter-tab" data-filter="DEPTH_COLOR">Depth Color</button>
+          <button class="filter-tab" data-filter="QUANTUM_GLITCH">Glitch Prism</button>
+          <button class="filter-tab" data-filter="CYBER_XRAY">Cyber X-Ray</button>
+          <button class="filter-tab" data-filter="HOLO_MATRIX">Matrix Grid</button>
+          <button class="filter-tab" data-filter="THERMAL">Thermal IR</button>
+          <button class="filter-tab" data-filter="ANIME">Anime Cel</button>
+          <button class="filter-tab" data-filter="C41_NEGATIVE">Film Negative C-41</button>
+        </div>
+
+        <!-- Scene 2: Hair Dye & Makeup Swatches Dock -->
+        <div id="makeup-dock" class="dock-container interactive" style="display: none;">
+          <div class="swatch-group">
+            <span class="swatch-label">Hair:</span>
+            <div class="swatch none" data-hair="none" title="Original Hair"></div>
+            <div class="swatch active" style="background: linear-gradient(135deg, #c9808b, #ff758c);" data-hair="rosegold" title="Rose Gold"></div>
+            <div class="swatch" style="background: linear-gradient(135deg, #ff3d2e, #ffd166);" data-hair="sunset" title="Sunset Ombre"></div>
+            <div class="swatch" style="background: linear-gradient(135deg, #0066ff, #00f0ff);" data-hair="cyberblue" title="Cyber Blue"></div>
+            <div class="swatch" style="background: #169b62;" data-hair="emerald" title="Emerald"></div>
+            <div class="swatch" style="background: #2b0612;" data-hair="cherry" title="Cherry Cola"></div>
+            <div class="swatch" style="background: #d5dae4;" data-hair="platinum" title="Platinum Silver"></div>
+          </div>
+          <div class="swatch-group">
+            <span class="swatch-label">Lips:</span>
+            <div class="swatch none" data-lip="none" title="No Lipstick"></div>
+            <div class="swatch active" style="background: #e11d48;" data-lip="#e11d48" title="Ruby Velvet"></div>
+            <div class="swatch" style="background: #be123c;" data-lip="#be123c" title="Deep Rose"></div>
+            <div class="swatch" style="background: #701a75;" data-lip="#701a75" title="Plum Wine"></div>
+            <div class="swatch" style="background: #ea580c;" data-lip="#ea580c" title="Spiced Terra"></div>
+            <div class="swatch" style="background: #d946ef;" data-lip="#d946ef" title="Orchid Gloss"></div>
+          </div>
+        </div>
+
+        <!-- Scene 3: Mystic Jutsu Modes Dock -->
+        <div id="mystic-dock" class="dock-container interactive" style="display: none;">
+          <button class="filter-tab active" data-spell="SHIELD">Eldritch Shield</button>
+          <button class="filter-tab" data-spell="CHIDORI">Chidori Lightning</button>
+          <button class="filter-tab" data-spell="RASENGAN">Rasengan Vortex</button>
+          <button class="filter-tab" data-spell="PORTAL">Sling Portal</button>
+          <button class="filter-tab" data-spell="FLOW">Flow Ribbons</button>
+          <button class="filter-tab" data-spell="ALCHEMY">Alchemy Circle</button>
+          <button class="filter-tab" data-spell="CLOUD">3D Point Cloud</button>
+          <button class="filter-tab" data-spell="TEXT">Finger Text</button>
+          <button class="filter-tab" data-spell="FEEDBACK">Light Painter</button>
+          <button class="filter-tab" data-spell="FLOCK">Flow Swarm</button>
+        </div>
+
+        <!-- Scene 5: Avatar Dock -->
+        <div id="avatar-dock" class="dock-container interactive" style="display: none;">
+          <button class="filter-tab" id="av-cal">Calibrate (3s)</button>
+          <button class="filter-tab" id="av-reset">Reset Cal</button>
+          <button class="filter-tab" id="av-bg">Backdrop</button>
+          <button class="filter-tab" id="av-skel">Skeleton</button>
+          <button class="filter-tab" id="av-load">Load GLB</button>
+          <input type="file" id="av-file" accept=".glb" style="display:none">
+        </div>
+
+        <!-- Scene 4: Prana Catch Modes Dock -->
+        <div id="game-dock" class="dock-container interactive" style="display: none;">
+          <button class="filter-tab active" data-gmode="ARCADE">Arcade</button>
+          <button class="filter-tab" data-gmode="MATH">Math Catch</button>
+          <button class="filter-tab" data-gmode="CAPITALS">World Capitals</button>
+          <button class="filter-tab" data-gmode="ELEMENTS">Elements</button>
+          <button class="filter-tab" data-gmode="SCIENCE">Science Quiz</button>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Settings Drawer -->
+    <div id="settings-drawer" class="settings-drawer">
+      <div class="drawer-header">
+        <span class="drawer-title">System Settings</span>
+        <button id="btn-close-settings" class="btn-icon">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Effect Parameter Sliders (Defaults 100%) -->
+      <div class="settings-group">
+        <div class="section-label">Effect Fidelity</div>
+        
+        <div class="slider-row">
+          <div class="slider-info">
+            <span>Splat / Point Density</span>
+            <span id="val-density">100%</span>
+          </div>
+          <input type="range" id="slider-density" min="20" max="100" value="100">
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-info">
+            <span>Splat Radius &amp; Falloff</span>
+            <span id="val-radius">100%</span>
+          </div>
+          <input type="range" id="slider-radius" min="20" max="100" value="100">
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-info">
+            <span>Edge Contour Sharpness</span>
+            <span id="val-edge">100%</span>
+          </div>
+          <input type="range" id="slider-edge" min="10" max="100" value="100">
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-info">
+            <span>Zoom Lens Power</span>
+            <span id="val-zoom">250%</span>
+          </div>
+          <input type="range" id="slider-zoom" min="120" max="500" value="250">
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-info">
+            <span>Hair Dye Vibrance</span>
+            <span id="val-vibrance">85%</span>
+          </div>
+          <input type="range" id="slider-vibrance" min="20" max="100" value="85">
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-info">
+            <span>Skin Smoothing</span>
+            <span id="val-skin">60%</span>
+          </div>
+          <input type="range" id="slider-skin" min="0" max="100" value="60">
+        </div>
+      </div>
+
+      <!-- Skeletons & Spatial Tracking (Defaults OFF) -->
+      <div class="settings-group">
+        <div class="section-label">Overlays &amp; Skeletons</div>
+        
+        <div class="toggle-row">
+          <span>Prism Spatial Lock</span>
+          <button id="toggle-prism-lock" class="switch-btn">OFF</button>
+        </div>
+
+        <div class="toggle-row">
+          <span>Hand Skeleton Wireframe</span>
+          <button id="toggle-hands" class="switch-btn">OFF</button>
+        </div>
+
+        <div class="toggle-row">
+          <span>Body Pose Skeleton</span>
+          <button id="toggle-pose" class="switch-btn">OFF</button>
+        </div>
+
+        <div class="toggle-row">
+          <span>Face Mesh Wireframe</span>
+          <button id="toggle-face" class="switch-btn">OFF</button>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="section-label">Studio Tools</div>
+        <div class="toggle-row"><span>Capture Photo</span><button id="btn-capture" class="switch-btn">SNAP</button></div>
+        <div class="toggle-row"><span>Fullscreen</span><button id="btn-fullscreen" class="switch-btn">GO</button></div>
+        <div class="toggle-row" id="row-install" style="display:none"><span>Install App</span><button id="btn-install" class="switch-btn">INSTALL</button></div>
+      </div>
+
+      <div class="settings-group">
+        <button id="btn-show-instructions" class="switch-btn" style="padding: 10px; text-align: center;">View Instructions</button>
+      </div>
+    </div>
+
+    <!-- Onboarding Modal -->
+    <div id="onboard-modal" class="onboard-modal">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div class="modal-title">DIVYA // à¤¦à¤¿à¤µà¥à¤¯</div>
+          <div class="modal-tag">Puranic Spatial Vision Engine</div>
+        </div>
+
+        <div class="instruction-steps">
+          <div class="step-item">
+            <span class="step-num">1</span>
+            <span><strong>Dual Pinch Engage:</strong> Pinch thumb and index on both hands to open the spatial window. Once engaged, fingers latch to the corners.</span>
+          </div>
+          <div class="step-item">
+            <span class="step-num">2</span>
+            <span><strong>Upward &amp; Full Expansion:</strong> Move your index fingers UP to stretch the ceiling. Bring all 4 fingers together to shrink the prism to a pinpoint!</span>
+          </div>
+          <div class="step-item">
+            <span class="step-num">3</span>
+            <span><strong>Auto-Fade Protection:</strong> Taking your hands off-screen smoothly clears the prism without getting stuck.</span>
+          </div>
+          <div class="step-item">
+            <span class="step-num">4</span>
+            <span><strong>Hair Dye &amp; Mystic Jutsu:</strong> Select bottom tabs for salon AI hair color, feathered lipstick, Doctor Strange shields, and Chidori lightning!</span>
+          </div>
+          <div class="step-item">
+            <span class="step-num">5</span>
+            <span><strong>Pinch Shutter:</strong> Open the prism wide (outline turns green), then pinch index to thumb on both hands to save a clean camera photo with watermark.</span>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button id="btn-enter" class="btn-primary">Enter Studio</button>
+          <button id="btn-quick-settings" class="btn-ghost">Settings</button>
+        </div>
+        <div style="text-align:center;margin-top:12px;font:10px var(--font-mono);letter-spacing:.1em;color:var(--text-muted)">POWERED BY <a href="https://razeltech.github.io" target="_blank" rel="noopener" style="color:var(--accent-blue);text-decoration:none">RAZEL TECH</a></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MediaPipe Tasks Vision & Application Logic -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
