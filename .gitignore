@@ -28,3 +28,6 @@ dist/
 
 # Large generated artifacts (keep og-preview.jpg and favicon sources committed)
 favicon.jpg
+
+# Temporary scratch scripts
+scratch/

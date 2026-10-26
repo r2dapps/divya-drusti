@@ -2841,26 +2841,41 @@
       }
 
       if (video.srcObject) {
-        video.srcObject.getTracks().forEach(t => t.stop());
+        try {
+          const tracks = video.srcObject.getTracks();
+          tracks.forEach(t => t.stop());
+        } catch (e) {}
+        video.srcObject = null;
+        // Hardware camera release pause
+        await new Promise(r => setTimeout(r, 60));
       }
 
       const prefFacing = facingMode || state.facingMode || "user";
       state.facingMode = prefFacing;
 
-      const videoConstraints = deviceId
-        ? { deviceId: { exact: deviceId } }
-        : { width: { ideal: 1920, max: 1920 }, height: { ideal: 1080, max: 1080 }, facingMode: { ideal: prefFacing } };
+      let stream = null;
+      try {
+        const videoConstraints = deviceId
+          ? { deviceId: { exact: deviceId } }
+          : { width: { ideal: 1920, max: 1920 }, height: { ideal: 1080, max: 1080 }, facingMode: { ideal: prefFacing } };
+        stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+      } catch (err1) {
+        console.warn("Primary camera constraints failed, attempting fallback:", err1);
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: prefFacing },
+            audio: false
+          });
+        } catch (err2) {
+          console.warn("FacingMode fallback failed, attempting generic video:", err2);
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+      }
 
-      const constraints = {
-        video: videoConstraints,
-        audio: false
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       video.srcObject = stream;
       await new Promise(resolve => {
         video.onloadedmetadata = () => {
-          video.play();
+          video.play().catch(() => {});
           resolve();
         };
       });
@@ -3073,7 +3088,9 @@
       const py = (e.clientY - rect.top) * (vecCanvas.height / rect.height);
       const cw = vecCanvas.width, ch = vecCanvas.height;
 
-      // Find nearest corner if quad is active or engage quad on touch
+      // Only allow corner handle dragging if prism quad is already active
+      if (!state.prismActive) return;
+
       const cornerCoords = {
         tl: { x: state.corners.tl.x * cw, y: state.corners.tl.y * ch },
         tr: { x: state.corners.tr.x * cw, y: state.corners.tr.y * ch },
@@ -3093,26 +3110,6 @@
 
       if (closestCorner) {
         draggingPrismCorner = closestCorner;
-        state.prismActive = true;
-        state.prismLocked = true;
-        if (btnPrismLock) {
-          btnPrismLock.classList.add("active");
-          btnPrismLock.textContent = "Quad: Locked";
-        }
-      } else if (!state.prismActive) {
-        // Tap to engage default central quad
-        state.targetCorners = {
-          tl: { x: Math.max(0.05, (px - 140) / cw), y: Math.max(0.05, (py - 140) / ch) },
-          tr: { x: Math.min(0.95, (px + 140) / cw), y: Math.max(0.05, (py - 140) / ch) },
-          br: { x: Math.min(0.95, (px + 140) / cw), y: Math.min(0.95, (py + 140) / ch) },
-          bl: { x: Math.max(0.05, (px - 140) / cw), y: Math.min(0.95, (py + 140) / ch) }
-        };
-        state.prismActive = true;
-        state.prismLocked = true;
-        if (btnPrismLock) {
-          btnPrismLock.classList.add("active");
-          btnPrismLock.textContent = "Quad: Locked";
-        }
       }
     }
 
@@ -3343,44 +3340,59 @@
       if (state.availableCameras.length <= 1) await enumerateCameras();
 
       let nextIsEnv = false;
-      if (state.availableCameras.length > 1) {
-        state.currentCameraIndex = (state.currentCameraIndex + 1) % state.availableCameras.length;
-        const target = state.availableCameras[state.currentCameraIndex];
-        const label = (target.label || "").toLowerCase();
-        nextIsEnv = label.includes("back") || label.includes("rear") || label.includes("environment");
-        try {
-          await startWebcam(target.deviceId, nextIsEnv ? "environment" : "user");
-        } catch (e) {
-          console.warn("Device ID switch failed, falling back to facingMode toggle:", e);
-          state.facingMode = state.facingMode === "user" ? "environment" : "user";
+      try {
+        if (state.availableCameras.length > 1) {
+          state.currentCameraIndex = (state.currentCameraIndex + 1) % state.availableCameras.length;
+          const target = state.availableCameras[state.currentCameraIndex];
+          const label = (target.label || "").toLowerCase();
+          nextIsEnv = label.includes("back") || label.includes("rear") || label.includes("environment");
+          try {
+            await startWebcam(target.deviceId, nextIsEnv ? "environment" : "user");
+          } catch (e) {
+            console.warn("Device ID switch failed, falling back to facingMode toggle:", e);
+            state.facingMode = state.facingMode === "user" ? "environment" : "user";
+            nextIsEnv = state.facingMode === "environment";
+            try {
+              await startWebcam(null, state.facingMode);
+            } catch (e2) {
+              console.warn("Fallback camera start failed:", e2);
+            }
+          }
+        } else {
+          // Toggle user <-> environment
+          state.facingMode = (state.facingMode === "environment") ? "user" : "environment";
           nextIsEnv = state.facingMode === "environment";
-          await startWebcam(null, state.facingMode);
+          try {
+            await startWebcam(null, state.facingMode);
+          } catch (e) {
+            console.warn("FacingMode switch failed:", e);
+          }
         }
-      } else {
-        // Toggle user <-> environment
-        state.facingMode = (state.facingMode === "environment") ? "user" : "environment";
-        nextIsEnv = state.facingMode === "environment";
-        try {
-          await startWebcam(null, state.facingMode);
-        } catch (e) {
-          console.warn("FacingMode switch failed:", e);
+
+        // Automatically mirror front camera and un-mirror back camera
+        state.mirrorView = !nextIsEnv;
+        if (btnCamFlip) btnCamFlip.classList.toggle("active", state.mirrorView);
+
+        // Re-enumerate cameras in case labels were unlocked
+        await enumerateCameras();
+
+        // Show brief status feedback
+        const sb = document.getElementById("status-badge");
+        if (sb) {
+          const prevText = sb.textContent;
+          sb.textContent = nextIsEnv ? "CAMERA: REAR / ENVIRONMENT (MIRROR OFF)" : "CAMERA: FRONT / USER (MIRROR ON)";
+          sb.style.display = "block";
+          setTimeout(() => { sb.textContent = prevText; }, 2000);
         }
-      }
-
-      // Automatically mirror front camera and un-mirror back camera
-      state.mirrorView = !nextIsEnv;
-      if (btnCamFlip) btnCamFlip.classList.toggle("active", state.mirrorView);
-
-      // Re-enumerate cameras in case labels were unlocked
-      await enumerateCameras();
-
-      // Show brief status feedback
-      const sb = document.getElementById("status-badge");
-      if (sb) {
-        const prevText = sb.textContent;
-        sb.textContent = nextIsEnv ? "CAMERA: REAR / ENVIRONMENT (MIRROR OFF)" : "CAMERA: FRONT / USER (MIRROR ON)";
-        sb.style.display = "block";
-        setTimeout(() => { sb.textContent = prevText; }, 2000);
+      } catch (err) {
+        console.warn("Camera switch error handled safely:", err);
+        const sb = document.getElementById("status-badge");
+        if (sb) {
+          const prevText = sb.textContent;
+          sb.textContent = "CAMERA UNAVAILABLE / OCCUPIED";
+          sb.style.display = "block";
+          setTimeout(() => { sb.textContent = prevText; }, 2500);
+        }
       }
     }
     btnCamSwap.addEventListener("click", switchCamera);
@@ -4262,6 +4274,7 @@
 
     // 3. Main Air Music Draw Loop
     function drawMusic(w, h) {
+      const nowMs = performance.now();
       badge("AIR MUSIC · play with fingers, mouse or touch · polyphonic synthesizers");
       const c = vCtx;
       const instrument = state.instrument || "PIANO";
@@ -4574,62 +4587,168 @@
         const chordKeys = Object.keys(GUITAR_CHORDS);
         const activeChordKey = state.activeGuitarChord || "OPEN";
         const curChord = GUITAR_CHORDS[activeChordKey] || GUITAR_CHORDS["OPEN"];
+        const isMobile = w < 640;
 
-        // 1. Left Fretboard Chord Selector Zone
-        const chordPanelW = Math.min(180, w * 0.22);
-        const chordBtnH = 34;
-        const chordStartY = h * 0.36;
+        let strLeft, strRight, strTopY, strSpacing, fretboardH;
 
-        c.save();
-        c.fillStyle = "rgba(10, 14, 23, 0.82)";
-        c.strokeStyle = "rgba(56, 189, 248, 0.35)";
-        c.lineWidth = 1;
-        c.beginPath();
-        c.roundRect(12, chordStartY - 10, chordPanelW, chordKeys.length * (chordBtnH + 6) + 16, 10);
-        c.fill();
-        c.stroke();
+        if (isMobile) {
+          // Mobile / Portrait Layout: Responsive Horizontal Chord Strip
+          const chordBarY = Math.floor(h * 0.28);
+          const chordBarH = 34;
+          const chordBtnW = Math.max(48, Math.floor((w - 28) / chordKeys.length));
 
-        chordKeys.forEach((ck, ci) => {
-          const cy = chordStartY + ci * (chordBtnH + 6);
-          const isAct = ck === activeChordKey;
-          c.fillStyle = isAct ? "rgba(56, 189, 248, 0.28)" : "rgba(255, 255, 255, 0.04)";
-          c.strokeStyle = isAct ? "#38bdf8" : "rgba(255, 255, 255, 0.12)";
-          c.lineWidth = isAct ? 1.5 : 1;
+          c.save();
+          c.fillStyle = "rgba(10, 15, 26, 0.88)";
+          c.strokeStyle = "rgba(56, 189, 248, 0.35)";
+          c.lineWidth = 1;
           c.beginPath();
-          c.roundRect(18, cy, chordPanelW - 12, chordBtnH, 6);
+          c.roundRect(10, chordBarY - 6, w - 20, chordBarH + 12, 10);
           c.fill();
           c.stroke();
 
-          c.font = "700 12px system-ui, -apple-system, sans-serif";
-          c.fillStyle = isAct ? "#ffffff" : "#94a3b8";
-          c.textAlign = "center";
-          c.textBaseline = "middle";
-          c.fillText(GUITAR_CHORDS[ck].name, 18 + (chordPanelW - 12) / 2, cy + chordBtnH / 2);
+          chordKeys.forEach((ck, ci) => {
+            const bx = 14 + ci * chordBtnW;
+            const bw = chordBtnW - 4;
+            const isAct = ck === activeChordKey;
+            c.fillStyle = isAct ? "rgba(56, 189, 248, 0.32)" : "rgba(255, 255, 255, 0.05)";
+            c.strokeStyle = isAct ? "#38bdf8" : "rgba(255, 255, 255, 0.12)";
+            c.lineWidth = isAct ? 1.5 : 1;
+            c.beginPath();
+            c.roundRect(bx, chordBarY, bw, chordBarH, 6);
+            c.fill();
+            c.stroke();
 
-          fingertips.forEach(ft => {
-            if (ft.x >= 18 && ft.x <= 18 + chordPanelW - 12 && ft.y >= cy && ft.y <= cy + chordBtnH) {
-              if (state.activeGuitarChord !== ck) {
-                state.activeGuitarChord = ck;
-                playAudioTone(440, "sine", 0.04, 0.1);
-                badge(`AIR GUITAR · CHORD ${GUITAR_CHORDS[ck].name}`);
+            c.font = "700 11px system-ui, -apple-system, sans-serif";
+            c.fillStyle = isAct ? "#ffffff" : "#94a3b8";
+            c.textAlign = "center";
+            c.textBaseline = "middle";
+            const shortName = ck === "OPEN" ? "OPEN" : (ck.replace("_MAJ", "").replace("_MIN", "m"));
+            c.fillText(shortName, bx + bw / 2, chordBarY + chordBarH / 2);
+
+            fingertips.forEach(ft => {
+              if (ft.x >= bx && ft.x <= bx + bw && ft.y >= chordBarY && ft.y <= chordBarY + chordBarH) {
+                if (state.activeGuitarChord !== ck) {
+                  state.activeGuitarChord = ck;
+                  playAudioTone(440, "sine", 0.04, 0.1);
+                  badge(`AIR GUITAR · CHORD ${GUITAR_CHORDS[ck].name}`);
+                }
               }
-            }
+            });
           });
-        });
-        c.restore();
+          c.restore();
 
-        // 2. 6 Horizontal Glowing Guitar Strings
-        const strLeft = chordPanelW + 28;
-        const strRight = w - 20;
+          strLeft = 36;
+          strRight = w - 20;
+          strTopY = chordBarY + chordBarH + 20;
+          strSpacing = Math.min(48, Math.floor((h * 0.40) / 5));
+          fretboardH = strSpacing * 5 + 32;
+        } else {
+          // Desktop / Landscape Layout: Sleek Chord Panel on Left
+          const chordPanelW = Math.min(130, Math.floor(w * 0.16));
+          const chordBtnH = 34;
+          const chordStartY = Math.floor(h * 0.32);
+
+          c.save();
+          c.fillStyle = "rgba(10, 15, 26, 0.88)";
+          c.strokeStyle = "rgba(56, 189, 248, 0.35)";
+          c.lineWidth = 1;
+          c.beginPath();
+          c.roundRect(12, chordStartY - 10, chordPanelW, chordKeys.length * (chordBtnH + 6) + 16, 10);
+          c.fill();
+          c.stroke();
+
+          chordKeys.forEach((ck, ci) => {
+            const cy = chordStartY + ci * (chordBtnH + 6);
+            const isAct = ck === activeChordKey;
+            c.fillStyle = isAct ? "rgba(56, 189, 248, 0.28)" : "rgba(255, 255, 255, 0.04)";
+            c.strokeStyle = isAct ? "#38bdf8" : "rgba(255, 255, 255, 0.12)";
+            c.lineWidth = isAct ? 1.5 : 1;
+            c.beginPath();
+            c.roundRect(18, cy, chordPanelW - 12, chordBtnH, 6);
+            c.fill();
+            c.stroke();
+
+            c.font = "700 12px system-ui, -apple-system, sans-serif";
+            c.fillStyle = isAct ? "#ffffff" : "#94a3b8";
+            c.textAlign = "center";
+            c.textBaseline = "middle";
+            c.fillText(GUITAR_CHORDS[ck].name, 18 + (chordPanelW - 12) / 2, cy + chordBtnH / 2);
+
+            fingertips.forEach(ft => {
+              if (ft.x >= 18 && ft.x <= 18 + chordPanelW - 12 && ft.y >= cy && ft.y <= cy + chordBtnH) {
+                if (state.activeGuitarChord !== ck) {
+                  state.activeGuitarChord = ck;
+                  playAudioTone(440, "sine", 0.04, 0.1);
+                  badge(`AIR GUITAR · CHORD ${GUITAR_CHORDS[ck].name}`);
+                }
+              }
+            });
+          });
+          c.restore();
+
+          strLeft = chordPanelW + 36;
+          strRight = w - 24;
+          strTopY = chordStartY;
+          strSpacing = Math.min(50, Math.floor((h * 0.40) / 5));
+          fretboardH = strSpacing * 5 + 32;
+        }
+
         const strW = strRight - strLeft;
-        const strSpacing = (h * 0.38) / 5;
-        const strTopY = h * 0.38;
 
         if (!state.guitarStringVibrations) {
           state.guitarStringVibrations = [0, 0, 0, 0, 0, 0].map(() => ({ amp: 0, lastPluck: 0 }));
         }
 
+        // Draw Fretboard Body (dark acoustic neck background under strings)
+        c.save();
+        const fretboardBg = c.createLinearGradient(strLeft, strTopY, strRight, strTopY);
+        fretboardBg.addColorStop(0, "rgba(15, 23, 42, 0.85)");
+        fretboardBg.addColorStop(0.5, "rgba(20, 29, 50, 0.88)");
+        fretboardBg.addColorStop(1, "rgba(15, 23, 42, 0.85)");
+        c.fillStyle = fretboardBg;
+        c.strokeStyle = "rgba(56, 189, 248, 0.28)";
+        c.lineWidth = 1.5;
+        c.beginPath();
+        c.roundRect(strLeft - 16, strTopY - 14, strW + 32, fretboardH, 12);
+        c.fill();
+        c.stroke();
+
+        // Vertical Fret Wires and Inlay Dots
+        const numFrets = 6;
+        for (let f = 1; f <= numFrets; f++) {
+          const fx = strLeft + (f / (numFrets + 1)) * strW;
+          c.strokeStyle = "rgba(148, 163, 184, 0.25)";
+          c.lineWidth = 1.2;
+          c.beginPath();
+          c.moveTo(fx, strTopY - 10);
+          c.lineTo(fx, strTopY - 10 + fretboardH - 8);
+          c.stroke();
+
+          // Mother-of-pearl fret markers at 3rd and 5th fret
+          if (f === 2 || f === 4) {
+            c.fillStyle = "rgba(255, 255, 255, 0.35)";
+            c.beginPath();
+            c.arc(fx - (strW / (numFrets + 1)) * 0.5, strTopY + fretboardH * 0.44, 3.5, 0, TAU);
+            c.fill();
+          }
+        }
+
+        // Nut Bar (Left anchor)
+        c.fillStyle = "rgba(226, 232, 240, 0.6)";
+        c.beginPath();
+        c.roundRect(strLeft - 6, strTopY - 10, 4, fretboardH - 8, 2);
+        c.fill();
+
+        // Bridge Bar (Right anchor)
+        c.fillStyle = "rgba(245, 158, 11, 0.5)";
+        c.beginPath();
+        c.roundRect(strRight + 2, strTopY - 10, 4, fretboardH - 8, 2);
+        c.fill();
+        c.restore();
+
+        // 6 Horizontal Glowing Guitar Strings
         const stringColors = ["#f59e0b", "#fbbf24", "#38bdf8", "#818cf8", "#a855f7", "#ec4899"];
+        const stringThicknesses = [3.8, 3.2, 2.7, 2.2, 1.8, 1.4];
 
         for (let sIdx = 0; sIdx < 6; sIdx++) {
           const stringY = strTopY + sIdx * strSpacing;
@@ -4637,13 +4756,13 @@
           const fretOffset = curChord.frets[sIdx];
           const isMuted = fretOffset < 0;
 
-          // Check collisions with fingertips & pointers
+          // Check collisions with fingertips & pointers (smooth touch/mouse strumming)
           fingertips.forEach(ft => {
-            if (ft.x >= strLeft - 10 && ft.x <= strRight + 10) {
+            if (ft.x >= strLeft - 14 && ft.x <= strRight + 14) {
               const dy = Math.abs(ft.y - stringY);
               const touchKey = `gtr_${ft.id}_${sIdx}`;
-              if (dy < 14) {
-                if (!activeFingerTouches.get(touchKey) && (nowMs - vib.lastPluck > 90)) {
+              if (dy < 20) {
+                if (!activeFingerTouches.get(touchKey) && (nowMs - vib.lastPluck > 70)) {
                   activeFingerTouches.set(touchKey, true);
                   vib.lastPluck = nowMs;
                   vib.amp = 16.0;
@@ -4655,10 +4774,12 @@
                       x: ft.x,
                       y: stringY,
                       color: stringColors[sIdx],
-                      radius: 8,
-                      maxRadius: 36,
+                      radius: 10,
+                      maxRadius: 42,
                       alpha: 0.95
                     });
+                  } else {
+                    playAudioTone(180, "sawtooth", 0.04, 0.08);
                   }
                 }
               } else {
@@ -4669,17 +4790,17 @@
 
           const dt = (nowMs - vib.lastPluck) / 1000;
           const curAmp = Math.max(0, vib.amp * Math.exp(-dt * 4.5));
-          const strThickness = 3.5 - sIdx * 0.45;
+          const strThickness = stringThicknesses[sIdx];
 
           c.save();
           c.lineWidth = strThickness;
-          c.strokeStyle = isMuted ? "rgba(100, 116, 139, 0.4)" : stringColors[sIdx];
+          c.strokeStyle = isMuted ? "rgba(100, 116, 139, 0.45)" : stringColors[sIdx];
           c.shadowColor = isMuted ? "transparent" : stringColors[sIdx];
-          c.shadowBlur = curAmp > 1 ? 12 : 3;
+          c.shadowBlur = curAmp > 1 ? 14 : 3;
 
           c.beginPath();
-          if (curAmp > 0.5) {
-            const steps = 32;
+          if (curAmp > 0.4) {
+            const steps = 36;
             for (let i = 0; i <= steps; i++) {
               const u = i / steps;
               const px = strLeft + u * strW;
@@ -4694,13 +4815,13 @@
           }
           c.stroke();
 
-          // String Note Badge / Tag
-          c.font = "600 11px system-ui, -apple-system, sans-serif";
-          c.fillStyle = isMuted ? "#64748b" : "#f1f5f9";
+          // String Note Badge / Tag on Left Nut
+          c.font = "700 11px system-ui, -apple-system, sans-serif";
+          c.fillStyle = isMuted ? "#64748b" : (curAmp > 0.5 ? "#ffffff" : "#cbd5e1");
           c.textAlign = "right";
           c.textBaseline = "middle";
           const noteLabel = isMuted ? "X" : (fretOffset > 0 ? `${GUITAR_STRING_NAMES[sIdx]}+${fretOffset}` : GUITAR_STRING_NAMES[sIdx]);
-          c.fillText(noteLabel, strLeft - 8, stringY);
+          c.fillText(noteLabel, strLeft - 10, stringY);
           c.restore();
         }
       }
