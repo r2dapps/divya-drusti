@@ -873,6 +873,7 @@
         drawProximityPOP(vCtx, w, h, performance.now() * 0.001);
       }
       if (state.scene === "GAME") drawGame(w, h);
+      if (state.scene === "MUSIC") drawMusic(w, h);
       if (state.showFaceMesh && !state.capture && state.faceLandmarks) drawFaceMesh();
             if (state.shotFlash > 0) { vCtx.fillStyle = `rgba(255,255,255,${state.shotFlash * 0.6})`; vCtx.fillRect(0, 0, w, h); state.shotFlash -= 0.08; }
     }
@@ -884,7 +885,7 @@
     let prevHair = null, prevSkin = null, prevPerson = null;
     Object.assign(state, { trails: {}, lives: 3, streak: 0, level: 1, over: false, flash: 0, rings: [], headTrail: [],
       maskDirty: false, capture: false, lastHandsTime: -1e9, prevActive: false, shutterArmed: false, lastSnapshotBlob: null, lastSnapshotUrl: null, pinchSince: 0, lastShot: -1e9, shotFlash: 0, zoom: 2.5, skinSmooth: 0.6, best: 0, gmode: "ARCADE", fbGood: true,
-      lipOpacity: 0.35, plexusRadius: 65, flockCount: 1200, flockSpeed: 1.0, gameGalaxy: false });
+      lipOpacity: 0.35, plexusRadius: 65, flockCount: 1200, instrument: "PIANO", octaveOffset: 0, flockSpeed: 1.0, gameGalaxy: false });
     try { state.best = +localStorage.getItem("divya_best") || 0; } catch (e) {}
     const badge = t => { const b = document.getElementById("status-badge"); if (b.textContent !== t) b.textContent = t; };
     function glow(c, x, y, r, a, b) {
@@ -2550,10 +2551,12 @@
         state.scene = btn.dataset.scene;
 
         prismDock.style.display = state.scene === "PRISM" ? "flex" : "none";
+        const musicDock = document.getElementById("music-dock");
+        if (musicDock) musicDock.style.display = state.scene === "MUSIC" ? "flex" : "none";
         makeupDock.style.display = state.scene === "MAKEUP" ? "flex" : "none";
         mysticDock.style.display = state.scene === "MYSTIC" ? "flex" : "none";
         document.getElementById("game-dock").style.display = state.scene === "GAME" ? "flex" : "none";
-        statusBadge.style.display = (state.scene === "GAME" || state.scene === "MYSTIC" || state.scene === "AVATAR") ? "block" : "none";
+        statusBadge.style.display = (state.scene === "GAME" || state.scene === "MYSTIC" || state.scene === "AVATAR" || state.scene === "MUSIC") ? "block" : "none";
         document.getElementById("avatar-dock").style.display = state.scene === "AVATAR" ? "flex" : "none";
         glCanvas.style.display = state.scene === "AVATAR" ? "none" : "block";
         avCanvas.style.display = state.scene === "AVATAR" ? "block" : "none";
@@ -2572,6 +2575,8 @@
           resetGame();
         } else if (state.scene === "MYSTIC") {
           statusBadge.textContent = `JUTSU: ${state.spell}`;
+        } else if (state.scene === "MUSIC") {
+          statusBadge.textContent = `AIR MUSIC: ${state.instrument || "PIANO"}`;
         }
       });
     });
@@ -3391,6 +3396,499 @@
       localStorage.setItem("divya_pwa_dismissed", "installed");
     });
     
+    /*
+    /* =========================================================================
+       AIR MUSIC ENGINE: POLYPHONIC FINGER PIANO & VIRTUAL HOLOGRAPHIC DRUMS
+       ========================================================================= */
+    const musicRipples = [];
+    const activeFingerTouches = new Map(); // key: fingerId -> active target key/pad
+
+    // 1. Polyphonic Piano Synthesizer
+    function playPianoNote(freq, velocity = 0.8) {
+      if (state.soundEnabled === false) return;
+      try {
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        const now = audioCtx.currentTime;
+
+        // Fundamental oscillator (warm sine)
+        const osc1 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+        osc1.type = "sine";
+        osc1.frequency.setValueAtTime(freq, now);
+        gain1.gain.setValueAtTime(0.35 * velocity, now);
+        gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.85);
+        osc1.connect(gain1);
+        gain1.connect(audioCtx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.86);
+
+        // First harmonic (triangle warmth)
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.type = "triangle";
+        osc2.frequency.setValueAtTime(freq * 2, now);
+        gain2.gain.setValueAtTime(0.12 * velocity, now);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+        osc2.connect(gain2);
+        gain2.connect(audioCtx.destination);
+        osc2.start(now);
+        osc2.stop(now + 0.56);
+
+        // Strike brilliance (transient attack)
+        const osc3 = audioCtx.createOscillator();
+        const gain3 = audioCtx.createGain();
+        osc3.type = "sine";
+        osc3.frequency.setValueAtTime(freq * 3, now);
+        gain3.gain.setValueAtTime(0.08 * velocity, now);
+        gain3.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+        osc3.connect(gain3);
+        gain3.connect(audioCtx.destination);
+        osc3.start(now);
+        osc3.stop(now + 0.16);
+      } catch (e) {
+        console.warn("Piano audio error:", e);
+      }
+    }
+
+    // 2. Holographic Drum Kit Synthesizer (Kick, Snare, Hi-Hat, Crash, Toms)
+    function playDrumSound(type) {
+      if (state.soundEnabled === false) return;
+      try {
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        const now = audioCtx.currentTime;
+
+        if (type === "KICK") {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(140, now);
+          osc.frequency.exponentialRampToValueAtTime(38, now + 0.12);
+          gain.gain.setValueAtTime(0.65, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.4);
+        } else if (type === "SNARE") {
+          // Tone core
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(185, now);
+          osc.frequency.exponentialRampToValueAtTime(80, now + 0.08);
+          gain.gain.setValueAtTime(0.4, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.15);
+
+          // Snare wire rattle
+          const bSize = Math.floor(audioCtx.sampleRate * 0.18);
+          const buf = audioCtx.createBuffer(1, bSize, audioCtx.sampleRate);
+          const data = buf.getChannelData(0);
+          for (let i = 0; i < bSize; i++) data[i] = Math.random() * 2 - 1;
+          const noise = audioCtx.createBufferSource();
+          noise.buffer = buf;
+          const flt = audioCtx.createBiquadFilter();
+          flt.type = "highpass";
+          flt.frequency.value = 1200;
+          const ng = audioCtx.createGain();
+          ng.gain.setValueAtTime(0.35, now);
+          ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+          noise.connect(flt);
+          flt.connect(ng);
+          ng.connect(audioCtx.destination);
+          noise.start(now);
+        } else if (type === "HIHAT") {
+          const bSize = Math.floor(audioCtx.sampleRate * 0.07);
+          const buf = audioCtx.createBuffer(1, bSize, audioCtx.sampleRate);
+          const data = buf.getChannelData(0);
+          for (let i = 0; i < bSize; i++) data[i] = Math.random() * 2 - 1;
+          const noise = audioCtx.createBufferSource();
+          noise.buffer = buf;
+          const flt = audioCtx.createBiquadFilter();
+          flt.type = "highpass";
+          flt.frequency.value = 7500;
+          const gain = audioCtx.createGain();
+          gain.gain.setValueAtTime(0.28, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+          noise.connect(flt);
+          flt.connect(gain);
+          gain.connect(audioCtx.destination);
+          noise.start(now);
+        } else if (type === "CRASH") {
+          const bSize = Math.floor(audioCtx.sampleRate * 0.9);
+          const buf = audioCtx.createBuffer(1, bSize, audioCtx.sampleRate);
+          const data = buf.getChannelData(0);
+          for (let i = 0; i < bSize; i++) data[i] = Math.random() * 2 - 1;
+          const noise = audioCtx.createBufferSource();
+          noise.buffer = buf;
+          const flt = audioCtx.createBiquadFilter();
+          flt.type = "bandpass";
+          flt.frequency.value = 5200;
+          flt.Q.value = 1.4;
+          const gain = audioCtx.createGain();
+          gain.gain.setValueAtTime(0.38, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
+          noise.connect(flt);
+          flt.connect(gain);
+          gain.connect(audioCtx.destination);
+          noise.start(now);
+        } else if (type === "TOM_HIGH") {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.frequency.setValueAtTime(240, now);
+          osc.frequency.exponentialRampToValueAtTime(130, now + 0.22);
+          gain.gain.setValueAtTime(0.45, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.26);
+        } else if (type === "TOM_LOW") {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.frequency.setValueAtTime(135, now);
+          osc.frequency.exponentialRampToValueAtTime(75, now + 0.3);
+          gain.gain.setValueAtTime(0.5, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.33);
+        }
+      } catch (e) {
+        console.warn("Drum audio error:", e);
+      }
+    }
+
+    // 3. Main Air Music Draw Loop
+    function drawMusic(w, h) {
+      badge("AIR MUSIC · tap keys with fingertips · strike drum pads · polyphonic synthesizers");
+      const c = vCtx;
+      const instrument = state.instrument || "PIANO";
+      const showPiano = instrument === "PIANO" || instrument === "DUAL";
+      const showDrums = instrument === "DRUMS" || instrument === "DUAL";
+
+      // Collect all fingertips from detected hands
+      const fingertips = [];
+      if (state.handData && state.handData.length) {
+        state.handData.forEach((hd, handIdx) => {
+          [4, 8, 12, 16, 20].forEach(tipIdx => {
+            const pt = landmarkToScreen(hd.landmarks[tipIdx]);
+            fingertips.push({
+              id: `${handIdx}_${tipIdx}`,
+              x: pt.x,
+              y: pt.y,
+              handIdx,
+              tipIdx
+            });
+          });
+        });
+      }
+
+      // ----------------------------------------------------
+      // A. DRUMS RENDERING & STRIKE COLLISION
+      // ----------------------------------------------------
+      if (showDrums) {
+        const drumYOffset = instrument === "DUAL" ? -0.06 : 0;
+        const drumScale = instrument === "DUAL" ? 0.85 : 1.0;
+
+        const drumPads = [
+          { type: "CRASH", label: "CRASH", x: w * 0.18, y: h * (0.28 + drumYOffset), r: 46 * drumScale, color: "#fbbf24", glow: "rgba(251, 191, 36, 0.4)" },
+          { type: "HIHAT", label: "HI-HAT", x: w * 0.36, y: h * (0.22 + drumYOffset), r: 40 * drumScale, color: "#38bdf8", glow: "rgba(56, 189, 248, 0.4)" },
+          { type: "TOM_HIGH", label: "HI TOM", x: w * 0.54, y: h * (0.22 + drumYOffset), r: 42 * drumScale, color: "#a855f7", glow: "rgba(168, 85, 247, 0.4)" },
+          { type: "CRASH", label: "RIDE", x: w * 0.82, y: h * (0.28 + drumYOffset), r: 46 * drumScale, color: "#f59e0b", glow: "rgba(245, 158, 11, 0.4)" },
+          { type: "SNARE", label: "SNARE", x: w * 0.30, y: h * (0.45 + drumYOffset), r: 52 * drumScale, color: "#f43f5e", glow: "rgba(244, 63, 94, 0.45)" },
+          { type: "TOM_LOW", label: "FLOOR TOM", x: w * 0.70, y: h * (0.45 + drumYOffset), r: 52 * drumScale, color: "#10b981", glow: "rgba(16, 185, 129, 0.4)" },
+          { type: "KICK", label: "BASS KICK", x: w * 0.50, y: h * (0.50 + drumYOffset), r: 60 * drumScale, color: "#6366f1", glow: "rgba(99, 102, 241, 0.5)" }
+        ];
+
+        drumPads.forEach(pad => {
+          let hitByThisFrame = false;
+
+          fingertips.forEach(ft => {
+            const dist = Math.hypot(ft.x - pad.x, ft.y - pad.y);
+            const isInside = dist < pad.r;
+            const touchKey = `drum_${ft.id}_${pad.type}`;
+
+            if (isInside) {
+              if (!activeFingerTouches.get(touchKey)) {
+                // Strike triggered!
+                activeFingerTouches.set(touchKey, true);
+                playDrumSound(pad.type);
+                hitByThisFrame = true;
+
+                // Visual ripples
+                musicRipples.push({
+                  x: pad.x,
+                  y: pad.y,
+                  color: pad.color,
+                  radius: pad.r * 0.8,
+                  maxRadius: pad.r * 1.8,
+                  alpha: 0.95
+                });
+              } else {
+                hitByThisFrame = true;
+              }
+            } else {
+              activeFingerTouches.set(touchKey, false);
+            }
+          });
+
+          // Draw Drum Pad
+          c.save();
+          // Pad frosted base
+          c.beginPath();
+          c.arc(pad.x, pad.y, pad.r, 0, TAU);
+          c.fillStyle = hitByThisFrame ? pad.color : "rgba(15, 23, 42, 0.72)";
+          c.fill();
+
+          // Outer glowing ring
+          c.lineWidth = hitByThisFrame ? 4 : 2;
+          c.strokeStyle = pad.color;
+          c.shadowColor = pad.color;
+          c.shadowBlur = hitByThisFrame ? 22 : 8;
+          c.stroke();
+
+          // Inner resonance ring
+          c.beginPath();
+          c.arc(pad.x, pad.y, pad.r * 0.65, 0, TAU);
+          c.lineWidth = 1.2;
+          c.strokeStyle = "rgba(255, 255, 255, 0.35)";
+          c.stroke();
+
+          // Pad Label
+          c.font = `700 ${Math.max(9, Math.round(pad.r * 0.22))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+          c.fillStyle = hitByThisFrame ? "#000000" : "#f1f5f9";
+          c.textAlign = "center";
+          c.textBaseline = "middle";
+          c.fillText(pad.label, pad.x, pad.y);
+          c.restore();
+        });
+      }
+
+      // ----------------------------------------------------
+      // B. PIANO KEYBOARD RENDERING & KEY PRESS COLLISION
+      // ----------------------------------------------------
+      if (showPiano) {
+        const whiteNotes = ["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5"];
+        const whiteFreqs = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25, 587.33, 659.25];
+
+        const blackNoteMap = [
+          { idx: 0, note: "C#4", freq: 277.18 },
+          { idx: 1, note: "D#4", freq: 311.13 },
+          { idx: 3, note: "F#4", freq: 369.99 },
+          { idx: 4, note: "G#4", freq: 415.30 },
+          { idx: 5, note: "A#4", freq: 466.16 },
+          { idx: 7, note: "C#5", freq: 554.37 },
+          { idx: 8, note: "D#5", freq: 622.25 }
+        ];
+
+        const octMult = Math.pow(2, state.octaveOffset || 0);
+
+        const kbY = instrument === "DUAL" ? h * 0.70 : h * 0.62;
+        const kbH = instrument === "DUAL" ? h * 0.26 : h * 0.34;
+        const numWhite = whiteNotes.length;
+        const whiteW = w / numWhite;
+        const blackW = whiteW * 0.58;
+        const blackH = kbH * 0.62;
+
+        // Construct Black Keys Geometry
+        const blackKeys = blackNoteMap.map(bk => ({
+          note: bk.note,
+          freq: bk.freq * octMult,
+          x: (bk.idx + 1) * whiteW - blackW / 2,
+          y: kbY,
+          w: blackW,
+          h: blackH
+        }));
+
+        // Construct White Keys Geometry
+        const whiteKeys = whiteNotes.map((n, idx) => ({
+          note: n,
+          freq: whiteFreqs[idx] * octMult,
+          x: idx * whiteW,
+          y: kbY,
+          w: whiteW,
+          h: kbH
+        }));
+
+        // Detect collisions: Check Black keys first (top layer), then White keys
+        const hitNotesThisFrame = new Set();
+
+        fingertips.forEach(ft => {
+          let hitKey = null;
+
+          // Check black keys
+          for (const bk of blackKeys) {
+            if (ft.x >= bk.x && ft.x <= bk.x + bk.w && ft.y >= bk.y && ft.y <= bk.y + bk.h) {
+              hitKey = bk;
+              break;
+            }
+          }
+
+          // If not black key, check white keys
+          if (!hitKey) {
+            for (const wk of whiteKeys) {
+              if (ft.x >= wk.x && ft.x <= wk.x + wk.w && ft.y >= wk.y && ft.y <= wk.y + wk.h) {
+                hitKey = wk;
+                break;
+              }
+            }
+          }
+
+          if (hitKey) {
+            hitNotesThisFrame.add(hitKey.note);
+            const touchKey = `piano_${ft.id}_${hitKey.note}`;
+            if (!activeFingerTouches.get(touchKey)) {
+              activeFingerTouches.set(touchKey, true);
+              playPianoNote(hitKey.freq, 0.9);
+
+              musicRipples.push({
+                x: ft.x,
+                y: ft.y,
+                color: "#38bdf8",
+                radius: 12,
+                maxRadius: 55,
+                alpha: 0.95
+              });
+            }
+          } else {
+            // Finger not touching any key
+            for (const [k, v] of activeFingerTouches.entries()) {
+              if (k.startsWith(`piano_${ft.id}_`)) activeFingerTouches.set(k, false);
+            }
+          }
+        });
+
+        // 1. Draw White Keys
+        whiteKeys.forEach(wk => {
+          const isPressed = hitNotesThisFrame.has(wk.note);
+          c.save();
+          c.fillStyle = isPressed ? "rgba(56, 189, 248, 0.85)" : "rgba(240, 244, 250, 0.88)";
+          c.strokeStyle = "rgba(15, 23, 42, 0.5)";
+          c.lineWidth = 1.5;
+
+          // Rounded bottom corners
+          const pad = 1.5;
+          c.beginPath();
+          c.rect(wk.x + pad, wk.y, wk.w - pad * 2, wk.h);
+          c.fill();
+          c.stroke();
+
+          // Active glow
+          if (isPressed) {
+            c.shadowColor = "#38bdf8";
+            c.shadowBlur = 18;
+            c.strokeStyle = "#ffffff";
+            c.stroke();
+          }
+
+          // Note Label at bottom
+          c.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          c.fillStyle = isPressed ? "#ffffff" : "#334155";
+          c.textAlign = "center";
+          c.textBaseline = "bottom";
+          c.fillText(wk.note, wk.x + wk.w / 2, wk.y + wk.h - 8);
+          c.restore();
+        });
+
+        // 2. Draw Black Keys
+        blackKeys.forEach(bk => {
+          const isPressed = hitNotesThisFrame.has(bk.note);
+          c.save();
+          c.fillStyle = isPressed ? "#38bdf8" : "rgba(15, 23, 42, 0.95)";
+          c.strokeStyle = isPressed ? "#ffffff" : "rgba(148, 163, 184, 0.35)";
+          c.lineWidth = 1.2;
+
+          c.beginPath();
+          c.rect(bk.x, bk.y, bk.w, bk.h);
+          c.fill();
+          c.stroke();
+
+          if (isPressed) {
+            c.shadowColor = "#38bdf8";
+            c.shadowBlur = 20;
+            c.stroke();
+          }
+
+          // Black key label
+          c.font = '600 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          c.fillStyle = isPressed ? "#000000" : "#94a3b8";
+          c.textAlign = "center";
+          c.textBaseline = "bottom";
+          c.fillText(bk.note.slice(0, 2), bk.x + bk.w / 2, bk.y + bk.h - 6);
+          c.restore();
+        });
+      }
+
+      // ----------------------------------------------------
+      // C. FINGERTIP CURSORS & SPATIAL RIPPLES
+      // ----------------------------------------------------
+      // Draw Expanding Musical Ripples
+      for (let i = musicRipples.length - 1; i >= 0; i--) {
+        const rp = musicRipples[i];
+        rp.radius += 2.4;
+        rp.alpha -= 0.045;
+        if (rp.alpha <= 0) {
+          musicRipples.splice(i, 1);
+          continue;
+        }
+
+        c.save();
+        c.strokeStyle = rp.color;
+        c.lineWidth = 2.2;
+        c.globalAlpha = rp.alpha;
+        c.shadowColor = rp.color;
+        c.shadowBlur = 10;
+        c.beginPath();
+        c.arc(rp.x, rp.y, rp.radius, 0, TAU);
+        c.stroke();
+        c.restore();
+      }
+
+      // Draw Glowing Halos on all active fingertips
+      fingertips.forEach(ft => {
+        c.save();
+        glow(c, ft.x, ft.y, 14, "rgba(56, 189, 248, 0.8)", "rgba(56, 189, 248, 0)");
+        c.fillStyle = "#ffffff";
+        c.beginPath();
+        c.arc(ft.x, ft.y, 4, 0, TAU);
+        c.fill();
+        c.restore();
+      });
+    }
+
+    // 4. Air Music Dock Tab Listeners
+    document.querySelectorAll("[data-instrument]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-instrument]").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        state.instrument = btn.dataset.instrument;
+        const sb = document.getElementById("status-badge");
+        if (sb) sb.textContent = `AIR MUSIC: ${state.instrument}`;
+      });
+    });
+
+    const btnMusicOctave = document.getElementById("btn-music-octave");
+    if (btnMusicOctave) {
+      btnMusicOctave.addEventListener("click", () => {
+        state.octaveOffset = state.octaveOffset === 0 ? 1 : 0;
+        btnMusicOctave.textContent = state.octaveOffset === 0 ? "Octave: C4–E5" : "Octave: C5–E6";
+      });
+    }
+
+    const btnMusicClear = document.getElementById("btn-music-clear");
+    if (btnMusicClear) {
+      btnMusicClear.addEventListener("click", () => {
+        musicRipples.length = 0;
+        activeFingerTouches.clear();
+      });
+    }
+
+
     /* =========================================================================
        SPOTLIGHT TOUR ENGINE (First-time walkthrough & Settings launchable)
        ========================================================================= */
