@@ -720,6 +720,51 @@
       });
     }
 
+    
+    function drawPinchCountdown(ctx, pos, progress) {
+      if (!pos) return;
+      const { x, y } = pos;
+      const r = 32;
+      const secondsLeft = Math.max(1, Math.ceil((1.0 - progress) * 3));
+
+      ctx.save();
+      // Frosted dark pill background
+      ctx.beginPath();
+      ctx.arc(x, y, r + 4, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(6, 7, 10, 0.72)";
+      ctx.fill();
+
+      // Track ring
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+
+      // Active progress arc (cyan / slate highlight)
+      const startAng = -Math.PI / 2;
+      const endAng = startAng + progress * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(x, y, r, startAng, endAng);
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.95)";
+      ctx.lineWidth = 3.5;
+      ctx.lineCap = "round";
+      ctx.stroke();
+
+      // Countdown number
+      ctx.font = '700 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(secondsLeft.toString(), x, y);
+
+      // Text badge below
+      ctx.font = '600 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+      ctx.fillStyle = "rgba(243, 245, 248, 0.92)";
+      ctx.fillText("HOLD TO SNAP", x, y + r + 15);
+      ctx.restore();
+    }
+
     function render2DOverlays() {
       vCtx.clearRect(0, 0, vecCanvas.width, vecCanvas.height);
       const w = vecCanvas.width;
@@ -914,6 +959,7 @@
       }
       if (state.scene === "GAME") drawGame(w, h);
       if (state.showFaceMesh && !state.capture && state.faceLandmarks) drawFaceMesh();
+      if (!state.capture && state.pinchProgress > 0 && state.pinchPos) drawPinchCountdown(vCtx, state.pinchPos, state.pinchProgress);
       if (state.shotFlash > 0) { vCtx.fillStyle = `rgba(255,255,255,${state.shotFlash * 0.6})`; vCtx.fillRect(0, 0, w, h); state.shotFlash -= 0.08; }
     }
 
@@ -923,7 +969,7 @@
     const mkCanvas = document.createElement("canvas"), mkCtx = mkCanvas.getContext("2d");
     let prevHair = null, prevSkin = null, prevPerson = null;
     Object.assign(state, { trails: {}, lives: 3, streak: 0, level: 1, over: false, flash: 0, rings: [], headTrail: [],
-      maskDirty: false, capture: false, lastHandsTime: -1e9, prevActive: false, shutterArmed: false, gestureShutterEnabled: false, pinchSince: 0, lastShot: -1e9, shotFlash: 0, zoom: 2.5, skinSmooth: 0.6, best: 0, gmode: "ARCADE", fbGood: true,
+      maskDirty: false, capture: false, lastHandsTime: -1e9, prevActive: false, shutterArmed: false, gestureShutterEnabled: true, singlePinchSince: 0, pinchProgress: 0, pinchPos: null, lastSnapshotBlob: null, lastSnapshotUrl: null, pinchSince: 0, lastShot: -1e9, shotFlash: 0, zoom: 2.5, skinSmooth: 0.6, best: 0, gmode: "ARCADE", fbGood: true,
       lipOpacity: 0.35, plexusRadius: 65, flockSpeed: 1.0, gameGalaxy: false });
     try { state.best = +localStorage.getItem("divya_best") || 0; } catch (e) {}
     const badge = t => { const b = document.getElementById("status-badge"); if (b.textContent !== t) b.textContent = t; };
@@ -2756,22 +2802,38 @@
                   state.targetCorners.br.y = rightHand.sThumb.normY;
                 }
 
-                // PINCH SHUTTER (Defaults OFF to prevent accidental captures during normal prism interaction)
-                if (state.gestureShutterEnabled && state.scene === "PRISM" && state.prismActive && leftHand && rightHand) {
-                  const pts = [state.targetCorners.tl, state.targetCorners.tr, state.targetCorners.br, state.targetCorners.bl];
-                  let ar = 0;
-                  for (let i = 0; i < 4; i++) { const a = pts[i], b = pts[(i + 1) % 4]; ar += a.x * b.y - b.x * a.y; }
-                  if (Math.abs(ar) * 0.5 > 0.05) state.shutterArmed = true;
-                  if (state.shutterArmed && dualPinch) {
-                    if (!state.pinchSince) state.pinchSince = timeMs;
-                    // Require a steady, deliberate 2.0-second pinch hold so tapping or moving fingers never fires
-                    if (timeMs - state.pinchSince > 2000 && timeMs - state.lastShot > 3000) {
-                      state.capture = "gesture"; state.lastShot = timeMs; state.shutterArmed = false; state.pinchSince = 0;
-                    }
-                  } else state.pinchSince = 0;
+                // SINGLE-HAND PINCH SHUTTER (Hold steady for 3.0s with on-screen progress ring)
+                const pinchingHands = state.handData.filter(h => h.isPinching);
+                const singlePinchActive = state.gestureShutterEnabled && pinchingHands.length === 1;
+
+                if (singlePinchActive) {
+                  const pH = pinchingHands[0];
+                  const px = pH.sMid.normX * W;
+                  const py = pH.sMid.normY * H;
+
+                  if (!state.singlePinchSince) {
+                    state.singlePinchSince = timeMs;
+                    state.singlePinchPos = { x: px, y: py };
+                  } else {
+                    state.singlePinchPos.x += (px - state.singlePinchPos.x) * 0.3;
+                    state.singlePinchPos.y += (py - state.singlePinchPos.y) * 0.3;
+                  }
+
+                  const elapsed = timeMs - state.singlePinchSince;
+                  state.pinchProgress = Math.min(1.0, elapsed / 3000);
+                  state.pinchPos = { ...state.singlePinchPos };
+
+                  if (elapsed >= 3000 && (timeMs - state.lastShot > 3500)) {
+                    state.capture = "gesture";
+                    state.lastShot = timeMs;
+                    state.singlePinchSince = 0;
+                    state.pinchProgress = 0;
+                    state.pinchPos = null;
+                  }
                 } else {
-                  state.pinchSince = 0;
-                  state.shutterArmed = false;
+                  state.singlePinchSince = 0;
+                  state.pinchProgress = 0;
+                  state.pinchPos = null;
                 }
               }
 
@@ -3012,17 +3074,25 @@
       x.restore();
 
       c.toBlob(b => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(b);
-        a.download = `divya-drusti-${Date.now()}.png`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        state.lastSnapshotBlob = b;
+        if (state.lastSnapshotUrl) {
+          URL.revokeObjectURL(state.lastSnapshotUrl);
+        }
+        const url = URL.createObjectURL(b);
+        state.lastSnapshotUrl = url;
+
+        const previewModal = document.getElementById("snapshot-modal");
+        const previewImg = document.getElementById("snapshot-preview-img");
+        if (previewModal && previewImg) {
+          previewImg.src = url;
+          previewModal.style.display = "flex";
+        }
       }, "image/png");
       playAudioTone(1200, "square", 0.05, 0.08);
       state.shotFlash = 1;
       const sb = document.getElementById("status-badge"), prevDisp = sb.style.display;
-      sb.style.display = "block"; sb.textContent = "PHOTO SAVED · SPACE / C";
-      setTimeout(() => { sb.style.display = prevDisp; }, 1400);
+      sb.style.display = "block"; sb.textContent = "EFFECT CAPTURED · PREVIEW READY";
+      setTimeout(() => { sb.style.display = prevDisp; }, 1800);
     }
     const toggleGestureShutter = document.getElementById("toggle-gesture-shutter");
     if (toggleGestureShutter) {
@@ -3033,11 +3103,52 @@
       });
     }
 
+    
+    const snapshotModal = document.getElementById("snapshot-modal");
+    const btnSnapshotSave = document.getElementById("btn-snapshot-save");
+    const btnSnapshotRetake = document.getElementById("btn-snapshot-retake");
+    const btnSnapshotCloseX = document.getElementById("btn-snapshot-close-x");
+
+    function closeSnapshotModal() {
+      if (snapshotModal) snapshotModal.style.display = "none";
+      if (state.lastSnapshotUrl) {
+        URL.revokeObjectURL(state.lastSnapshotUrl);
+        state.lastSnapshotUrl = null;
+      }
+    }
+
+    if (btnSnapshotSave) {
+      btnSnapshotSave.addEventListener("click", () => {
+        if (state.lastSnapshotBlob) {
+          const a = document.createElement("a");
+          const dlUrl = URL.createObjectURL(state.lastSnapshotBlob);
+          a.href = dlUrl;
+          a.download = `divya-drusti-${Date.now()}.png`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(dlUrl), 4000);
+          const sb = document.getElementById("status-badge"), prevDisp = sb.style.display;
+          sb.style.display = "block"; sb.textContent = "PHOTO SAVED TO DISK";
+          setTimeout(() => { sb.style.display = prevDisp; }, 1800);
+        }
+        closeSnapshotModal();
+      });
+    }
+
+    if (btnSnapshotRetake) btnSnapshotRetake.addEventListener("click", closeSnapshotModal);
+    if (btnSnapshotCloseX) btnSnapshotCloseX.addEventListener("click", closeSnapshotModal);
+    if (snapshotModal) {
+      snapshotModal.addEventListener("click", e => {
+        if (e.target === snapshotModal) closeSnapshotModal();
+      });
+    }
+
+
     document.getElementById("btn-capture").addEventListener("click", () => { state.capture = "manual"; settingsDrawer.classList.remove("open"); });
     document.getElementById("btn-hud-capture").addEventListener("click", () => { state.capture = "manual"; });
 
     // Global keyboard capture trigger (Space / C)
     window.addEventListener("keydown", e => {
+      if (e.key === "Escape" && snapshotModal && snapshotModal.style.display !== "none") { closeSnapshotModal(); return; }
       if ((e.code === "Space" || e.key === "c" || e.key === "C") && e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
         e.preventDefault();
         state.capture = "manual";
